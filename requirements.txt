@@ -1,0 +1,9 @@
+holidays==0.66
+markdown>=3.7
+numpy>=1.25.0
+pandas>=2.0.3
+plotly>=5.18.0
+scipy>=1.11.1
+wxPython==4.2.2
+openpyxl
+kaleido

@@ -1,0 +1,496 @@
+
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>Grundlagen_Clusteranalyse</title>
+                <script type="text/javascript" async
+                  src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.0/es5/tex-mml-chtml.js">
+                </script>
+                <style>
+                    body {
+                        font-family: Arial, sans-serif;
+                        margin: 20px;
+                        padding: 20px;
+                        line-height: 1.6;
+                    }
+                    h1, h2, h3 {
+                        color: #333;
+                    }
+                    pre {
+                        background: #f4f4f4;
+                        padding: 10px;
+                        border-radius: 5px;
+                        overflow-x: auto;
+                    }
+                    img {
+                        max-width: 100%;
+                        height: auto;
+                        display: block;
+                        margin: 10px 0;
+                    }
+                    table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 10px 0;
+                    }
+                    th, td {
+                        border: 1px solid #ddd;
+                        padding: 8px;
+                        text-align: left;
+                    }
+                    th {
+                        background-color: #f4f4f4;
+                    }
+                </style>
+            </head>
+            <body>
+                <h1 id="grundlagen-clusteranalyse">Grundlagen Clusteranalyse</h1>
+<p>Diese Seite untersucht verschiedene hierarchische Agglomerationsalgorithmen und die einzelnen Schritte, die sich hinter einer Clusterung verbergen.<br />
+Zuerst werden einzelne Punkte geclustert &amp; danach das Verständnis auf Ganglinien erweitert.<br />
+Anschließend wird die Frage analysiert "Wann ist eine Netzganglinie zu groß".<br />
+Zuletzt wird untersucht, welches Linkage-Verfahren für die Clusterung von Ganglinien angemessen ist.</p>
+<hr />
+<h2 id="fur-die-clusterung-notwendige-begriffe-definitionen-und-ablaufe">Für die Clusterung notwendige Begriffe, Definitionen und Abläufe</h2>
+<p><strong>Clusterung</strong> = unüberwachtes Machine Learning zur Gruppierung von Daten, basierend auf einem Ähnlichkeitsmaß (=Distanzmaß) und einem Clusteralgorithmus.  </p>
+<p><strong>Klassifizierung</strong> = überwachter Lernprozess zur Gruppierung von Daten. Die Gruppen (=Klassen) sind im Vorfeld bekannt.  </p>
+<h3 id="funktionsweise-einer-clusterung">Funktionsweise einer Clusterung</h3>
+<p>Zwei Vorgaben sind bei einer Clusterung maßgebend:</p>
+<ul>
+<li>Die Definition des Ähnlichkeitsmaßes  </li>
+<li>Die Auswahl des Clusteralgorithmus  </li>
+</ul>
+<p>Ggf. weitere Verfahrensparameter je nach Clusteralgorithmus.  </p>
+<p>Nachfolgend werden zwei allgemein anwendbare Algorithmengruppen genannt:</p>
+<ul>
+<li><strong>Hierarchische Verfahren</strong>  </li>
+<li><strong>Partitionierende Verfahren</strong>  </li>
+</ul>
+<hr />
+<h2 id="hierarchische-verfahren">Hierarchische Verfahren</h2>
+<p>Anhand der Distanzmatrix werden Cluster hierarchisch aggregiert (<strong>agglomerative Verfahren</strong>) oder disaggregiert (<strong>divisive Verfahren</strong>).<br />
+Bei den agglomerativen Verfahren wird initial jedes Objekt zu einem Cluster, bei den divisiven Verfahren wird initial ein Cluster gebildet, das alle Objekte enthält.  </p>
+<p>In der Praxis werden hauptsächlich agglomerative Verfahren verwendet, deren Vorgehensweise nachfolgend erläutert wird.<br />
+Die Clusteranalyse erfolgt in drei Schritten:</p>
+<ol>
+<li>Bildung eines Clusterbaums / Zusammenfassung jeweils zweier Clusterobjekte in ( N - 1 ) Schritten.<br />
+   Welche Objekte zusammengefasst werden, hängt von der verwendeten Linkage-Funktion ab.  </li>
+<li>Definition von Clustern anhand von CutOff-Werten.  </li>
+<li>Ermittlung der repräsentativen Werte je Cluster.  </li>
+</ol>
+<h3 id="relevante-linkage-verfahren-zur-ermittlung-des-clusterbaums">Relevante Linkage-Verfahren zur Ermittlung des Clusterbaums</h3>
+<ul>
+<li><strong>Single Linkage-Verfahren:</strong><br />
+  Es ermittelt die paarweise größte Ähnlichkeit / geringste Distanz zwischen den Objekten zweier Cluster und wird deshalb auch als <strong>Nearest-Neighbour-Verfahren</strong> bezeichnet.  </li>
+</ul>
+<p>$$ d(A,B) = \min \left(d(x_A ,x_B )\right), \quad \text{mit} \quad x_A \in A, x_B \in B $$  </p>
+<ul>
+<li><strong>Complete Linkage-Verfahren:</strong><br />
+  Es ermittelt die paarweise geringste Ähnlichkeit / größte Distanz zwischen den Objekten zweier Cluster und wird deshalb auch als <strong>Farthest-Neighbour-Verfahren</strong> bezeichnet.  </li>
+</ul>
+<p>$$ d(A,B) = \max \left(d(x_A ,x_B )\right), \quad \text{mit} \quad x_A \in A, x_B \in B $$  </p>
+<ul>
+<li><strong>Average Linkage-Verfahren:</strong><br />
+  Es verwendet den arithmetischen Mittelwert der paarweisen Distanzen zwischen den Objekten zweier Cluster.  </li>
+</ul>
+<p>$$ d(A,B) = \frac{1}{|A|\cdot |B|} \sum_{x_A \in A, x_B \in B} d(x_A ,x_B ) $$  </p>
+<ul>
+<li><strong>Centroid Linkage-Verfahren:</strong><br />
+  Für das Centroid-Verfahren wird die Distanz zwischen den Mittelpunkten (Zentroiden) zweier Cluster berechnet.  </li>
+</ul>
+<p>$$ d(A,B) = d(c_A ,c_B ), \quad \text{mit} \quad c_A =\frac{1}{|A|}\sum_{x_A \in A} x_A ,\quad c_B =\frac{1}{|B|}\sum_{x_B \in B} x_B $$  </p>
+<ul>
+<li><strong>Ward-Verfahren:</strong><br />
+  Es verwendet den geringsten Anstieg der Summe der Fehlerquadrate.  </li>
+</ul>
+<p>$$ d(A,B) = \sqrt{\frac{2\cdot |A|\cdot |B|}{|A|+|B|}} \; ||c_A - c_B||_2 $$  </p>
+<p>mit  </p>
+<p>$$ c_A =\frac{1}{|A|} \sum_{x_A \in A} x_A , \quad c_B =\frac{1}{|B|} \sum_{x_B \in B} x_B $$  </p>
+<p><strong>Quellen:</strong> BACKHAUS et al. (2023), DOI: 10.1007/978-3-658-40465-9, scipy Doku + Quellen, Diss MaS  </p>
+<hr />
+<h2 id="partitionierende-verfahren">Partitionierende Verfahren</h2>
+<p>Partitionierende Verfahren unterteilen die Gesamtheit der Ganglinien in eine vorbestimmte Anzahl von Clustern.<br />
+Beginnend mit einer zufälligen Startzuordnung, wird diese durch iterative Austauschalgorithmen optimiert.<br />
+Dabei kann sich die Gruppenzugehörigkeit einer Ganglinie mehrfach ändern, bis ein festgelegtes Zielkriterium erfüllt ist oder das Verfahren konvergiert.  </p>
+<p>Zu den prominenten partitionierenden Methoden zählen:</p>
+<ul>
+<li><strong>k-Means-Verfahren</strong>  </li>
+<li><strong>Two-Step-Verfahren</strong>  </li>
+</ul>
+<p>Das <strong>k-Means-Verfahren</strong> wird auch als <strong>Clusterzentrenanalyse</strong> bezeichnet, da es darauf abzielt, die Gesamtabweichung der Objekte von den Clusterzentren zu minimieren.  </p>
+<p><strong>Quellen:</strong> BACKHAUS et al. (2023), DOI: 10.1007/978-3-658-40465-9.  </p>
+<hr />
+<h2 id="weitere-begriffe">Weitere Begriffe</h2>
+<h3 id="clusterbaum-agglomerativ-hierarchisch">Clusterbaum (Agglomerativ, hierarchisch)</h3>
+<p>Der Clusterbaum ist das Ergebnis einer Linkage-Funktion.<br />
+Er stellt die hierarchische Organisation von ( N ) Objekten dar, die schrittweise zusammengeführt werden.<br />
+Bei jeder Verzweigung werden die nächstgelegenen Cluster zu einem neuen Cluster verbunden.<br />
+Die Verzweigungen repräsentieren die Distanz oder Unähnlichkeit zwischen den Clustern.  </p>
+<h3 id="dendrogramm">Dendrogramm</h3>
+<p>Ein <strong>Dendrogramm</strong> ist eine grafische Darstellung des Clusterbaums.<br />
+Es zeigt die hierarchische Struktur der Clusterung und kann zur Bestimmung sinnvoller CutOff-Werte herangezogen werden.<br />
+Ein gesetzter <strong>CutOff-Wert</strong> im Dendrogramm ermöglicht die Bestimmung einer optimalen Anzahl von Clustern durch das Trennen des Baums auf einer bestimmten Höhe.<br />
+Ohne CutOff-Wert werden final alle Objekte zusammengeführt.  </p>
+<h3 id="silhouettenwerte-und-silhouettendiagramm">Silhouettenwerte und Silhouettendiagramm</h3>
+<p><strong>Silhouettenwerte</strong> sind eine Möglichkeit zur quantitativen Beurteilung einer Clusterung.<br />
+Der Silhouettenwert eines zu clusternden Objekts (z. B. einer Ganglinie) gibt an,<br />
+wie ähnlich das Objekt seinem Cluster ist im Vergleich zu den benachbarten Clustern.  </p>
+<p>Er entspricht der Differenz der mittleren Ähnlichkeit des Objekts zu den anderen Objekten im Cluster<br />
+und der mittleren Ähnlichkeit des Objekts zu den Objekten des nächstgelegenen Clusters,<br />
+normiert mit dem größeren der beiden Werte.  </p>
+<p>Der Wertebereich der Silhouette ist damit ([-1, 1]):  </p>
+<ul>
+<li><strong>Je positiver der Wert ist</strong>, desto besser ist die Zugehörigkeit &amp; Ähnlichkeit des Objekts zum identifizierten Cluster.  </li>
+<li><strong>Werte um 0</strong>: Das Objekt befindet sich an oder sehr nahe an der Grenze zwischen zwei benachbarten Clustern.  </li>
+<li><strong>Negative Werte</strong>: Das Objekt passt eher zum benachbarten Cluster.  </li>
+</ul>
+<p>Der <strong>Silhouettenkoeffizient eines Clusters</strong> ist der Mittelwert der Silhouetten des Clusters.<br />
+Die Darstellung der Silhouetten aller Objekte, sortiert nach Cluster, ist das <strong>Silhouettendiagramm</strong>.  </p>
+<p>Wikipedia teilt den Wertebereich der Silhouetten in folgende Klassen ein (ToDo: Verifizieren):</p>
+<ul>
+<li>(0.75, 1]: starke Strukturierung  </li>
+<li>(0.5, 0.75]: mittlere Strukturierung  </li>
+<li>(0.25, 0.5]: schwache Strukturierung  </li>
+<li>(0, 0.25]: keine Strukturierung  </li>
+</ul>
+<h2 id="untersuchung-clusterung-punktwerte">Untersuchung Clusterung Punktwerte</h2>
+<p>Koordinaten und Entfernungen</p>
+<pre><code class="language-python">import numpy as np
+from scipy.spatial.distance import pdist, squareform
+
+points = np.array([[1, 2], [2.5, 4.5], [2, 2], [4, 2.5],  [4, 1.5]])
+dist = pdist(points) # Paar-weise Distanz, vereinfachte Vektordarstellung (dist(k,l)=dist(l,k); dist(k,k)=0)
+dist_matr = squareform(dist) # Entfernungsmatrix
+
+print(dist_matr)
+</code></pre>
+<pre><code>[[0.         2.91547595 1.         3.04138127 3.04138127]
+ [2.91547595 0.         2.54950976 2.5        3.35410197]
+ [1.         2.54950976 0.         2.06155281 2.06155281]
+ [3.04138127 2.5        2.06155281 0.         1.        ]
+ [3.04138127 3.35410197 2.06155281 1.         0.        ]]
+</code></pre>
+<h3 id="vergleich-linkage">Vergleich Linkage</h3>
+<p>Output Linkage: 4 x N-1 Matrix</p>
+<ul>
+<li>Spalte 1: Cluster A</li>
+<li>Spalte 2: Cluster B</li>
+<li>Spalte 3: Distanz</li>
+<li>Spalte 4: Anzahl an Elemente in gebildetem Cluster</li>
+<li>N: Anzahl Objekte zum Clustern</li>
+</ul>
+<pre><code class="language-python">from scipy.cluster.hierarchy import linkage
+single_lkg = linkage(dist, &quot;single&quot;)
+print(single_lkg)
+</code></pre>
+<pre><code>[[0.         2.         1.         2.        ]
+ [3.         4.         1.         2.        ]
+ [5.         6.         2.06155281 4.        ]
+ [1.         7.         2.5        5.        ]]
+</code></pre>
+<pre><code class="language-python">complete_lkg = linkage(dist, &quot;complete&quot;)
+print(complete_lkg)
+</code></pre>
+<pre><code>[[0.         2.         1.         2.        ]
+ [3.         4.         1.         2.        ]
+ [1.         5.         2.91547595 3.        ]
+ [6.         7.         3.35410197 5.        ]]
+</code></pre>
+<pre><code class="language-python">average_lkg = linkage(dist, &quot;average&quot;)
+print(average_lkg)
+</code></pre>
+<pre><code>[[0.         2.         1.         2.        ]
+ [3.         4.         1.         2.        ]
+ [5.         6.         2.55146704 4.        ]
+ [1.         7.         2.82977192 5.        ]]
+</code></pre>
+<pre><code class="language-python">centroid_lkg = linkage(dist, &quot;centroid&quot;)
+print(centroid_lkg)
+</code></pre>
+<pre><code>[[0.         2.         1.         2.        ]
+ [3.         4.         1.         2.        ]
+ [5.         6.         2.5        4.        ]
+ [1.         7.         2.51246891 5.        ]]
+</code></pre>
+<p><img alt="" src="file:///C:/Users/ac128405/Desktop/Software/clustertool2020/clustertool-py/documentation/pictures/Punktclusterung.png" /></p>
+<p>Berechnung des Abstands ( d ) zwischen Cluster 6 (1 &amp; 3) und Cluster 7 (4 &amp; 5)</p>
+<ul>
+<li>
+<p><strong>Single Linkage:</strong><br />
+$$d = \min \left(d_{14} ,d_{15} ,d_{34} ,d_{35} \right) = 2.0616$$</p>
+</li>
+<li>
+<p><strong>Complete Linkage:</strong><br />
+$$d = \max \left(d_{14} ,d_{15} ,d_{34} ,d_{35} \right) = 3.0414$$
+  → 6 &amp; 7 werden nicht gemerged, da ( d_{26} &lt; d_{67} ).</p>
+</li>
+<li>
+<p><strong>Average Linkage:</strong><br />
+$$d = \frac{1}{4} \left(d_{14} + d_{15} + d_{34} + d_{35} \right) = 2.5515$$</p>
+</li>
+<li>
+<p><strong>Centroid Linkage:</strong><br />
+$$ d = \text{dist} \left( \left[ 1.5, 2 \right], \left[ 4, 2 \right] \right) = 2.5$$ 
+  (Abstand der neuen Mittelpunkte)</p>
+</li>
+</ul>
+<h3 id="einfluss-cutoff-wert">Einfluss CutOff-Wert</h3>
+<p>Output fcluster: N x 1 Vektor = Jedem Objekt wird ein Clusterindex zugeordnet</p>
+<pre><code class="language-python">from scipy.cluster.hierarchy import fcluster
+# Ergebnis Cluster: jedem Objekt wird ein Clusterindex zugeordnet
+zuordnung_cutoff1 = fcluster(average_lkg, t=1, criterion=&quot;distance&quot;)
+print(zuordnung_cutoff1)
+</code></pre>
+<pre><code>[1 3 1 2 2]
+</code></pre>
+<pre><code class="language-python">zuordnung_cutoff2 = fcluster(average_lkg, t=2, criterion=&quot;distance&quot;)
+print(zuordnung_cutoff2)
+</code></pre>
+<pre><code>[1 3 1 2 2]
+</code></pre>
+<pre><code class="language-python">zuordnung_cutoff2_5 = fcluster(average_lkg, t=2.5, criterion=&quot;distance&quot;)
+print(zuordnung_cutoff2_5)
+</code></pre>
+<pre><code>[1 3 1 2 2]
+</code></pre>
+<pre><code class="language-python">zuordnung_cutoff2_6= fcluster(average_lkg, t=2.6, criterion=&quot;distance&quot;)
+print(zuordnung_cutoff2_6)
+</code></pre>
+<pre><code>[1 2 1 1 1]
+</code></pre>
+<pre><code class="language-python">zuordnung_cutoff3 = fcluster(average_lkg, t=3, criterion=&quot;distance&quot;)
+print(zuordnung_cutoff3)
+</code></pre>
+<pre><code>[1 1 1 1 1]
+</code></pre>
+<p>Interpretation CutOff-Werte:</p>
+<p>horizontaler Schnitt mit y=CutOff im Dendrogramm. Die einzelne Äste definieren die Cluster. Falls bei dem CutOff-Wert Äste zusammenlaufen, werden diese noch in Clustern zusammengeführt</p>
+<pre><code class="language-python">from scipy.cluster.hierarchy import dendrogram
+from matplotlib import pyplot as plt
+
+# Erstelle das Dendrogramm
+fig, ax = plt.subplots(figsize=(8, 5))
+dendrogram(average_lkg, ax=ax)
+
+# Achsentitel setzen
+ax.set_xlabel(&quot;Index Ausgangsobjekte&quot;)
+ax.set_ylabel(&quot;Distanz zwischen den Objekten&quot;)
+
+# Füge horizontale Cutoff-Linien hinzu
+cutoff_values = [1, 2, 2.6]
+
+for cutoff in cutoff_values:
+    ax.axhline(y=cutoff, color='r', linewidth=1.5, label=f'CutOff={cutoff:.1f}')
+
+# Legende anzeigen
+ax.legend()
+
+# Diagramm anzeigen
+plt.show()
+</code></pre>
+<p><img alt="png" src="file:///C:/Users/ac128405/Desktop/Software/clustertool2020/clustertool-py/documentation/pictures/output_14_0.png" /></p>
+<h2 id="untersuchung-clusterung-ganglinien-vektoren">Untersuchung Clusterung Ganglinien (=Vektoren)</h2>
+<p>Betrachtung 4 Verkehrsstärkevektoren für 4h</p>
+<pre><code class="language-python">data = np.array([
+[169, 433, 452, 332],
+[357, 247, 229, 256],
+[383, 263, 204, 262],
+[445, 261, 218, 260],
+])
+</code></pre>
+<h3 id="beispiel-mit-euklidischer-distanz">Beispiel mit euklidischer Distanz</h3>
+<pre><code class="language-python">dist = pdist(data, 'euclidean');
+dist_matr = squareform(dist)
+print(dist_matr)
+</code></pre>
+<pre><code>[[  0.         354.18215652 375.63279942 407.06264874]
+ [354.18215652   0.          39.91240409  89.87213139]
+ [375.63279942  39.91240409   0.          63.62389488]
+ [407.06264874  89.87213139  63.62389488   0.        ]]
+</code></pre>
+<pre><code class="language-python"># Beispiel Berechnung euklidische Distanz zwischen 2 Vektoren
+# Distanz zwischen 2 Vektoren: Wurzel aus Skalarprodukt
+d12 = np.sqrt((data[0, :] - data[1,:]) @ (data[0, :] - data[1,:]).T)
+print(d12)
+</code></pre>
+<pre><code>354.1821565240124
+</code></pre>
+<p>Hinweis: bei Abstandsmaße ohne Vektorennorm (GEH, SQV) wird der Abstand der elementweise Abstand berechnet und anschließend der Mittelwert gebildet</p>
+<pre><code class="language-python">single_lkg = linkage(dist, &quot;single&quot;)
+complete_lkg = linkage(dist, &quot;complete&quot;)
+average_lkg = linkage(dist, &quot;average&quot;)
+centroid_lkg = linkage(dist, &quot;centroid&quot;)
+print(&quot;single linkage&quot;, &quot;\n&quot;, single_lkg)
+print(&quot;complete linkage&quot;, &quot;\n&quot;, complete_lkg)
+print(&quot;average linkage&quot;, &quot;\n&quot;, average_lkg)
+print(&quot;centroid linkage&quot;, &quot;\n&quot;, centroid_lkg)
+</code></pre>
+<pre><code>single linkage 
+ [[  1.           2.          39.91240409   2.        ]
+ [  3.           4.          63.62389488   3.        ]
+ [  0.           5.         354.18215652   4.        ]]
+complete linkage 
+ [[  1.           2.          39.91240409   2.        ]
+ [  3.           4.          89.87213139   3.        ]
+ [  0.           5.         407.06264874   4.        ]]
+average linkage 
+ [[  1.           2.          39.91240409   2.        ]
+ [  3.           4.          76.74801313   3.        ]
+ [  0.           5.         378.95920156   4.        ]]
+centroid linkage 
+ [[  1.           2.          39.91240409   2.        ]
+ [  3.           4.          75.26121179   3.        ]
+ [  0.           5.         377.56780112   4.        ]]
+</code></pre>
+<h3 id="berechnung-abstand-d-zwischen-cluster-3-und-4-4-besteht-aus-1-2">Berechnung Abstand $d$ zwischen Cluster 3 und 4 ( 4 besteht aus 1 &amp; 2):</h3>
+<ul>
+<li>Single Linkage $d=\min \left(d_{42} ,d_{43} \right)=63.6239$</li>
+<li>Complete Linkage $d=\max \left(d_{42} ,d_{43} \right)=89.721$</li>
+<li>Average Linkage $d=\frac{1}{2}\cdot \;\left(d_{42} +\;d_{43} \right)=76.748$</li>
+<li>Centroid Linkage $d=\textrm{dist}\left(\textrm{mean}\left(2,3\right),4\right)=75\ldotp 2612$ (Abstand der neuen Mittelpunkte)</li>
+</ul>
+<pre><code class="language-python">vec12 = np.mean(data[[1,2],:], axis=0)
+dist34 = np.sqrt((data[3,:]-vec12) @ (data[3,:]-vec12).T)
+print(&quot;Distanz Cluster 3 &amp; 4, centroid linkage&quot;, dist34)
+</code></pre>
+<pre><code>[[357 247 229 256]
+ [383 263 204 262]]
+[370.  255.  216.5 259. ]
+Distanz CLuster 3 &amp; 4, centroid linkage 75.26121178934073
+</code></pre>
+<h3 id="beispiel-geh">Beispiel GEH</h3>
+<p>Umsetzung GEH zwischen Vektoren in <em>metrics/GEH.m</em></p>
+<ul>
+<li>Berechnung paarweiser GEH-Werte</li>
+<li>Wertepaare, bei denen ein Wert nicht vorhanden ist, werden nicht berücksichtigt.</li>
+<li>Minimaler Wert (1e-308) wird addiert um Teilung durch 0 zu vermeiden</li>
+<li>GEH der beiden Vektoren = arithmetischer Mittelwert (ohne NaN)</li>
+</ul>
+<pre><code class="language-python">from modules.metrics import geh
+dist = pdist(data, geh);
+dist_matr = squareform(dist)
+</code></pre>
+<pre><code class="language-python">single_lkg = linkage(dist, &quot;single&quot;)
+complete_lkg = linkage(dist, &quot;complete&quot;)
+average_lkg = linkage(dist, &quot;average&quot;)
+centroid_lkg = linkage(dist, &quot;centroid&quot;)
+print(&quot;single linkage&quot;, &quot;\n&quot;, single_lkg)
+print(&quot;complete linkage&quot;, &quot;\n&quot;, complete_lkg)
+print(&quot;average linkage&quot;, &quot;\n&quot;, average_lkg)
+print(&quot;centroid linkage&quot;, &quot;\n&quot;, centroid_lkg)
+</code></pre>
+<pre><code>single linkage 
+ [[2.         3.         1.0645727  2.        ]
+ [1.         4.         1.10638138 3.        ]
+ [0.         5.         9.5493108  4.        ]]
+complete linkage 
+ [[ 2.          3.          1.0645727   2.        ]
+ [ 1.          4.          1.5644419   3.        ]
+ [ 0.          5.         10.48882413  4.        ]]
+average linkage 
+ [[2.         3.         1.0645727  2.        ]
+ [1.         4.         1.33541164 3.        ]
+ [0.         5.         9.99184198 4.        ]]
+centroid linkage 
+ [[2.         3.         1.0645727  2.        ]
+ [1.         4.         1.24597366 3.        ]
+ [0.         5.         9.97254371 4.        ]]
+</code></pre>
+<p>Berechnung Abstand $d$ zwischen Cluster 2  und 5 (3 &amp; 4):</p>
+<ul>
+<li>Single Linkage $$d=\min \left(d_{23} ,d_{24} \right)=1.1064$$</li>
+<li>Complete Linkage $$d=\max \left(d_{23} ,d_{24} \right)=1.5644$$</li>
+<li>Average Linkage $$d=\frac{1}{2}\cdot \;\left(d_{23} +\;d_{24} \right)=1.3354$$</li>
+<li>Die Centroid Linkage Berechnung ist nicht sinnvoll, da das Clusterzentrum die euklidische Distanz berücksichtigt.</li>
+</ul>
+<h3 id="umgang-mit-ausfallen">Umgang mit Ausfällen</h3>
+<ul>
+<li>unvollständige Wertepaare werden nicht berücksichtigt.</li>
+</ul>
+<h2 id="einfluss-der-lange-der-vektoren">Einfluss der Länge der Vektoren</h2>
+<p>Die Distanzberechnung ermittelt genau einen Wert für die Distanz zweier Objekte, um eine zweidimensionale Distanzmatrix aufstellen zu können. Anschließend wird dieser aggregierte Distanzwert in der Clusterung verwendet. Dementsprechend ist die Dimension/Länge der Ganglinie nur in der Distanzberechnung relevant.</p>
+<ul>
+<li>Die Netzganglinie ist zu groß/ungeeignet, wenn die aggregierte Distanz den Einzeldistanzen zwischen den Wertepaaren zweier Ganglinien nicht gerecht wird.</li>
+<li>Weiter ist zu beachten, dass der GEH nicht selbstskalierend ist, d.h bei großen Unterschieden in dem Wertebereich der Verkehrsstärken kann es zu Verfälschungen kommen.</li>
+<li>Die Formähnlichkeit zweier Ganglinien wird sowohl bei der euklidischen Distanz als auch dem GEH nicht berücksichtigt.</li>
+<li>Einzeldistanzen können die gegebenen CutOff-Werte deutlich überschreiben.</li>
+</ul>
+<p>Umgang mit großen Netzganglinien (Vorschlag MaS, nicht getestet, enthält keine Anpassungen der Clusteralgorithmen):</p>
+<ul>
+<li>Vorklassifizierung (Tagestypen, Straßenklassen..)</li>
+<li>Deskriptive Analyse der Verteilung der Einzeldistanzen.</li>
+<li>Ggf Anpassung Aggregationsfkt Einzeldistanzen.</li>
+<li>(Distanzmaß implementieren, dass sowohl Form- als auch Lageähnlichkeit und ggf leichte Verschiebungen berücksichtigt)</li>
+</ul>
+<h2 id="welches-linkage-verfahren-ist-fur-die-clusterung-von-ganglinien-geeignet">Welches Linkage-Verfahren ist für die Clusterung von Ganglinien geeignet</h2>
+<p>(Text aus Diss MaS, Beispiel mit ClusterData.mat erstellt)</p>
+<ul>
+<li>Ward/Centroid-Linkage nicht möglich mit GEH als Distanzfunktion</li>
+<li>Average Linkage als vergleichsweise neutrale Alternative</li>
+</ul>
+<p>Das Single Linkage-Verfahren tendiert dazu, wenige große und viele kleine Cluster zu bilden. Damit kann es vergleichsweise gut Ausreißer ermitteln. Die großen Gruppen sind das Resultat einer Neigung zur Kettenbildung. Das bedeutet, es werden bei der Clusterung primär einzelne Objekte aneinandergereiht, die die großen Cluster bilden. Die Ähnlichkeiten innerhalb des Clusters können dabei vergleichsweise gering sein. Das Complete-Linkage-Verfahren tendiert dazu, viele kleine Cluster mit ähnlicher Größe zu erzeugen. Demgegenüber sind die Eigenschaften des Average-Linkage- und des Ward-Verfahrens relativ neutral. Insbesondere das Ward-Verfahren produziert tendenziell Cluster von vergleichbarer Größe und gilt als ein sehr effektiver Fusionsalgorithmus, allerdings ist seine Anwendbarkeit eingeschränkt (BACKHAUS et al. (2023, S. 521f)). Der Effekt der Kettenbildung kann durch die Anpassung des CutOff-Werts begrenzt werden. Bei zu geringen CutOff-Werten repräsentiert ein Cluster nur wenige Objekte und es erfolgt keine relevante Aggregation. Bei hohen Werten nimmt die Homogenität der Objekte eines Clusters ab und die Varianz der Werte innerhalb eines Clusters wird groß.</p>
+<pre><code class="language-python">import modules
+from pathlib import Path
+import warnings
+warnings.filterwarnings('ignore')
+
+file_path = Path.cwd() / &quot;data&quot;  # Beispiel-Pfad zur Eingabedatei
+
+# Daten laden
+data = modules.data_handler.load_and_prepare_data(file_path / &quot;ClusterData.mat&quot;)
+
+</code></pre>
+<p>Clusterung Average Linkage, CutOff = GEH 5</p>
+<pre><code class="language-python"># Cluster-Objekt erstellen
+avg_linkage_cutoff5 = modules.clustering.Clusterung(data, attr_data=data_attributes,
+                                          method=&quot;average linkage&quot;, distance_function=&quot;GEH&quot;, cutoff=5,
+                                          kmeans_preset=&quot;random&quot;, use_calendar=False)
+
+# Clusterung durchführen
+avg_linkage_cutoff5.perform_clustering()
+fig,_  = avg_linkage_cutoff5.plots_results()
+fig.show()
+</code></pre>
+<p>Ganglinien Average Linkage, CutOff = GEH 5
+<img alt="png" src="file:///C:/Users/ac128405/Desktop/Software/clustertool2020/clustertool-py/documentation/pictures/output_32_0.png" /></p>
+<p>Clusterung Average Linkage, CutOff = GEH 8</p>
+<pre><code class="language-python"># Cluster-Objekt erstellen
+avg_linkage_cutoff8 = modules.clustering.Clusterung(data, attr_data=data_attributes,
+                                          method=&quot;average linkage&quot;, distance_function=&quot;GEH&quot;, cutoff=8,
+                                          kmeans_preset=&quot;random&quot;, use_calendar=False)
+
+# Clusterung durchführen
+avg_linkage_cutoff8.perform_clustering()
+fig,_  = avg_linkage_cutoff8.plots_results()
+fig.show()
+</code></pre>
+<p>Ganglinien Average Linkage, CutOff = GEH 8
+<img alt="png" src="file:///C:/Users/ac128405/Desktop/Software/clustertool2020/clustertool-py/documentation/pictures/output_34_0.png" />
+Clusterung Single Linkage, CutOff = GEH 8</p>
+<pre><code class="language-python"># Cluster-Objekt erstellen
+single_linkage_cutoff8 = modules.clustering.Clusterung(data, attr_data=data_attributes,
+                                          method=&quot;single linkage&quot;, distance_function=&quot;GEH&quot;, cutoff=8,
+                                          kmeans_preset=&quot;random&quot;, use_calendar=False)
+
+# Clusterung durchführen
+single_linkage_cutoff8.perform_clustering()
+fig,_  = single_linkage_cutoff8.plots_results()
+fig.show()
+</code></pre>
+<p>Ganglinien Single Linkage, CutOff = GEH 8
+<img alt="png" src="file:///C:/Users/ac128405/Desktop/Software/clustertool2020/clustertool-py/documentation/pictures/output_36_0.png" /></p>
+<p>Clusterung Complete Linkage, CutOff = GEH 8</p>
+<pre><code class="language-python"># Cluster-Objekt erstellen
+cmpl_linkage_cutoff8 = modules.clustering.Clusterung(data, attr_data=data_attributes,
+                                          method=&quot;complete linkage&quot;, distance_function=&quot;GEH&quot;, cutoff=8,
+                                          kmeans_preset=&quot;random&quot;, use_calendar=False)
+
+# Clusterung durchführen
+cmpl_linkage_cutoff8.perform_clustering()
+fig,_  = cmpl_linkage_cutoff8.plots_results()
+fig.show()
+</code></pre>
+<p>Ganglinien Complete Linkage, CutOff = GEH 8
+<img alt="png" src="file:///C:/Users/ac128405/Desktop/Software/clustertool2020/clustertool-py/documentation/pictures/output_38_0.png" /></p>
+            </body>
+            </html>
+            

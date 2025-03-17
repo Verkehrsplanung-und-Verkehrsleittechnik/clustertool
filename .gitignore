@@ -1,3 +1,6 @@
-
-Protokoll.txt
-debugging_tests.mlx
+/Logfile.log
+/documentation/Settings_doxygen
+/.idea
+Untersuchung_Clusterung_Ganglinie.ipynb
+/.venv/
+/HowTo_Kompilieren.txt
