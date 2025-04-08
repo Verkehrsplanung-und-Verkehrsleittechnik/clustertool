@@ -630,7 +630,8 @@ class Clusterung:
         df_plot.loc[:, "calendar_week"] = "CW " + df_plot["week"].astype(str)  + " " + df_plot["year"].astype(str)#  Format week labels
 
         # Label clusters with counts
-        df_plot.loc[:, "label"] = "Cluster " + df_plot["cluster"].astype(str) + \
+        df_plot.loc[:, "label"] = df_plot.index.date.astype(str) + \
+                                      ", Cluster " + df_plot["cluster"].astype(str) + \
                                   " (n=" + df_plot["cluster"].replace(self.cluster_properties["counts"]).astype(str) + ")"
 
         # Sort by day number and week (descending)
@@ -1111,7 +1112,7 @@ class Clusterung:
             "CutOff": self.cutoff,
             "Wdh. kmeans": self.kmeans_iter,
             "Start kmeans": self.kmeans_presettings,
-            "Anz Daten": len(self.data),
+            "Anz. Daten": len(self.data),
             "Anz. Cluster": len(self.cluster_properties),
             "max. Clustergröße": self.cluster_properties.counts.max(),
         }
@@ -1119,7 +1120,7 @@ class Clusterung:
         max_dist_series = self.get_max_distances_cluster()
         max_index = max_dist_series.idxmin() if "sqv" in self.distance_function else max_dist_series.idxmax()
         max_value = max_dist_series.min() if "sqv" in self.distance_function else max_dist_series.max()
-        dict_info["max. interne Distanz"] = f"{max_value:.2f} (Cluster {max_index})"
+        dict_info["max. interne Distanz"] = f"{max_value:.2f} (Cluster {max_index:.0f})"
 
         return pd.Series(dict_info)
 
@@ -1184,9 +1185,11 @@ def format_diagrams(fig, language, n_dec_x=0, n_dec_y=0, font_size=16):
     #  Boolean indicating whether the figure contains subplots.
     if has_subplots:
         for i in range(1, 3):  # 2 Subplots
-            fig.update_layout({f'xaxis{i}': xaxis_format, f'yaxis{i}': yaxis_format})
+            fig.update_layout({f'xaxis{i}': xaxis_format, f'yaxis{i}': yaxis_format}, separators=",.")
     else:
-        fig.update_layout(xaxis=xaxis_format, yaxis=yaxis_format, font_size=font_size)
+        fig.update_layout(xaxis=xaxis_format, yaxis=yaxis_format, font_size=font_size,
+            separators=",."
+        )
 
     return fig
 

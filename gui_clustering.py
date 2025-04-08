@@ -1486,8 +1486,23 @@ class MainTab(wx.ScrolledWindow):
     #  @param id The unique ID of the clustering analysis.
     #  @param clustering_obj The clustering object containing analysis results.
     def add_row(self, id, clustering_obj):
+        cluster_info = clustering_obj.get_info()
+
         # Add new entry to the table
-        self.cluster_table.AppendItem(["True", str(id)] + clustering_obj.get_info().astype(str).values.tolist())
+        self.cluster_table.AppendItem(["True", str(id)] + [
+            cluster_info.Methode.title(),
+            cluster_info.Distanz.upper(),
+            cluster_info.Startdatum.strftime("%d.%m.%Y"),
+            cluster_info.Enddatum.strftime("%d.%m.%Y"),
+            str(int(cluster_info["Max. Anz Cluster"])) if cluster_info["Max. Anz Cluster"] is not None else "",
+            str(cluster_info["CutOff"]).replace(".",",") if cluster_info["CutOff"] is not None else "",
+            str(int(cluster_info["Wdh. kmeans"])) if cluster_info["Wdh. kmeans"] is not None else "",
+            cluster_info["Start kmeans"] if cluster_info["Start kmeans"] is not None else "",
+            str(cluster_info["Anz. Daten"]),
+            str(cluster_info["Anz. Cluster"]),
+            str(int(cluster_info["max. Clustergröße"])),  # Kein None Check notwendig, da bereits weiter oben überprüft
+            str(cluster_info["max. interne Distanz"]).replace(".", ","),
+        ])
 
         ## @var new_row
         #  The index of the newly added row.

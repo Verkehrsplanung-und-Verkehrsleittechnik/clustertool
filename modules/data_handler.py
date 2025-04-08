@@ -25,8 +25,7 @@
 #  @date 2025
 #
 #  @note The module is designed to work with the `Clusterung` and `CalendarAttributes` classes.
-
-
+import logging
 
 import pandas as pd
 import numpy as np
@@ -42,7 +41,16 @@ import json
 #  @return A Pandas DataFrame containing the loaded data.
 def load_csv(file_path):
     # Lade die erste Zeile als DataFrame, um die Werte zu analysieren
-    first_row = pd.read_csv(file_path, nrows=1, header=None)
+    first_row = pd.read_csv(file_path, nrows=1, header=None, delimiter=",")
+
+    # Trennzeichen prüfen (= DE oder EN Formatierung)
+    if len(first_row.columns) == 1:
+        delimiter = ";"
+        decimalsep = ","
+        first_row = pd.read_csv(file_path, nrows=1, header=None, delimiter=delimiter, decimal=decimalsep)
+    else:
+        delimiter = ","
+        decimalsep = ","
 
     # Prüfen, ob die erste Zeile Text enthält
     contains_text = first_row.map(lambda x: isinstance(x, str) and any(c.isalpha() for c in str(x))).any().any()
@@ -59,14 +67,10 @@ def load_csv(file_path):
         header_option = 0  # Default: Header annehmen
 
     # CSV mit der erkannten Header-Option einlesen
-    df = pd.read_csv(file_path, index_col=0, parse_dates=True, header=header_option)
+    df = pd.read_csv(file_path, index_col=0, parse_dates=True, header=header_option,
+                     delimiter=delimiter, decimal=decimalsep)
 
-    # Convert first column if it is a MATLAB datenum
-    if np.issubdtype(df.index.dtype, np.floating) or np.issubdtype(df.index.dtype, int):
-        try:
-            df.index = datenum_to_datetime(pd.to_numeric(df.index, errors="coerce"))
-        except Exception as e:
-            print(f"Error converting datenum: {e}")
+    df.index = convert_to_datetime(df.index)
 
     return df
 
@@ -86,18 +90,11 @@ def load_excel(file_path, sheet=None):
     contains_text = first_row.map(lambda x: isinstance(x, str) and any(c.isalpha() for c in str(x))).any().any()
 
     if first_row.index[0]== ""  or contains_text:
-        df =  pd.read_excel(file_path, index_col=0, parse_dates=True, date_format="%d.%m.%Y", sheet_name=sheet)
+        df = pd.read_excel(file_path, index_col=0, parse_dates=False, sheet_name=sheet)
     else:
-        df =  pd.read_excel(file_path, index_col=0, parse_dates=True, date_format="%d.%m.%Y", sheet_name=sheet, header=None)
+        df = pd.read_excel(file_path, index_col=0, parse_dates=False, sheet_name=sheet, header=None)
 
-    # Convert first column if it is a MATLAB datenum
-    if np.issubdtype(df.index.dtype, np.floating) or np.issubdtype(df.index.dtype, np.integer):
-        try:
-            df.index = datenum_to_datetime(df.index)
-        except Exception as e:
-            print(f"Error converting datenum: {e}")
-    elif np.issubdtype(df.index.dtype, str):
-        df.index = pd.to_datetime(df.index)
+    df.index = convert_to_datetime(df.index)
 
     return df
 
@@ -114,18 +111,42 @@ def load_mat(file_path):
         data = mat[keys[0]]
         df = pd.DataFrame(data)
         df = unpack_nested_lists(df)
-
-        # Convert first column if it is a MATLAB datenum
-        if np.issubdtype(df.iloc[:, 0].dtype, np.floating) or np.issubdtype(df.iloc[:, 0].dtype, np.integer):
-            try:
-                df.iloc[:, 0] = datenum_to_datetime(df.iloc[:, 0])
-            except Exception as e:
-                print(f"Error converting datenum: {e}")
-
         df.set_index(df.columns[0], inplace=True)
+
+        df.index = convert_to_datetime(df.index)
+
         return df
     else:
         raise ValueError(f"Multiple variables found in {file_path}: {keys}. Please specify.")
+
+def convert_to_datetime(idx_df):
+
+    # Convert first column if it is a MATLAB/Excel datenum
+    if np.issubdtype(idx_df.dtype, np.floating) or np.issubdtype(idx_df.dtype, np.integer):
+        try:
+            new_index = datenum_to_datetime(idx_df)
+        except Exception as e:
+            print(f"Error converting datenum: {e}")
+    elif isinstance(idx_df[0], str):
+        # Versuche mehrere Datumsformate
+        date_formats = ["%d.%m.%Y", 'ISO8601'] # ISO08601 deckt alle Kombinationen YYYY-mm-dd HH:MM:SS ab
+        for fmt in date_formats:
+            try:
+                new_index = pd.to_datetime(idx_df, format=fmt)
+                break  # Beende die Schleife, wenn die Konvertierung erfolgreich war
+            except ValueError:
+                continue  # Versuche das nächste Format
+        else:
+            logging.warning("Format datum nicht erkannt")
+            new_index = pd.to_datetime(idx_df, errors="ignore") # Rückfallebene, falls Format nicht erkannt
+    else:
+        new_index = idx_df
+        logging.warning("Keine Umwandlung Format Datum")
+
+    return new_index
+
+
+
 
 
 ## @brief Unpacks nested lists or arrays inside a DataFrame.
@@ -145,8 +166,24 @@ def datenum_to_datetime(datenum_array):
     # Therefore, compute the difference in days between the two epochs.
     MATLAB_to_Unix_days = 719529
 
-    # Convert the MATLAB datenum to seconds since the Unix epoch.
-    unix_epoch_seconds = np.round((datenum_array - MATLAB_to_Unix_days) * 86400).astype(int)  # 86400 seconds per day
+    # Excel Date (30.12.1899)
+    Excel_to_Unix_days = 25569
+
+    # MATLAB-Daten erkennen (sehr große Werte, z. B. ~7xxxxx)
+    is_matlab = datenum_array.min() > 700000
+
+    # Excel-Daten erkennen (realistische Werte > 40000, aber kleiner als MATLAB)
+    is_excel = (datenum_array.min() > 10000) & (datenum_array.min() < 700000)
+
+    if is_matlab:
+        # Convert the MATLAB datenum to seconds since the Unix epoch.
+        unix_epoch_seconds = np.round((datenum_array - MATLAB_to_Unix_days) * 86400).astype(int)  # 86400 seconds per day
+    elif is_excel:
+        # Convert the Excel datenum to seconds since the Unix epoch.
+        unix_epoch_seconds = np.round((datenum_array - Excel_to_Unix_days) * 86400).astype(int)
+    else:
+        logging.warning("Fall ist nicht implementiert")
+        unix_epoch_seconds = np.round((datenum_array) * 86400).astype(int)
 
     # Use pandas to convert these seconds into datetime objects.
     return pd.to_datetime(unix_epoch_seconds, unit='s', origin='unix')
@@ -175,7 +212,7 @@ def flatten_array(arr):
 def load_and_prepare_data(file_path, sheet=None):
     if file_path.suffix == ".csv":
         df = load_csv(file_path)
-    elif file_path.suffix in [".xlsx", ".xls", ".xlm"]:
+    elif file_path.suffix in [".xlsx", ".xls", ".xlm", ".xlsm"]:
         df = load_excel(file_path, sheet)
     elif file_path.suffix == ".mat":
         df = load_mat(file_path)

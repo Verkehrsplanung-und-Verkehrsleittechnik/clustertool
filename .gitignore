@@ -1,6 +1,6 @@
 /Logfile.log
 /documentation/Settings_doxygen
 /.idea
-Untersuchung_Clusterung_Ganglinie.ipynb
 /.venv/
-/HowTo_Kompilieren.txt
+/modules/__pycache__
+*.pyc
