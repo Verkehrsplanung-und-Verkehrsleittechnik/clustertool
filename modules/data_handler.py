@@ -50,7 +50,7 @@ def load_csv(file_path):
         first_row = pd.read_csv(file_path, nrows=1, header=None, delimiter=delimiter, decimal=decimalsep)
     else:
         delimiter = ","
-        decimalsep = ","
+        decimalsep = "."
 
     # Prüfen, ob die erste Zeile Text enthält
     contains_text = first_row.map(lambda x: isinstance(x, str) and any(c.isalpha() for c in str(x))).any().any()
