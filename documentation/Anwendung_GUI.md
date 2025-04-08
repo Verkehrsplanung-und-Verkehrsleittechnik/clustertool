@@ -71,6 +71,7 @@ Die Distanz zwischen Objekten wird berechnet mit:
         - Die erste Spalte wird als DateTime interpretiert und als Index verwendet.
         - Falls die Daten nur 2 Spalten umfassen, werden Tagesganglinien gebildet.
         - Ansonsten wird jede Zeile als Clusterobjekt (=Ganglinie) interpretiert.
+        - Spaltennamen werden erkannt & akzeptiert, wenn sie als Text formatiert sind.
         - Eine `.json` Datei ist nur zulässig, wenn sie das Ergebnis einer vorherigen Clusterung enthält.
         - Bei einer `.xlsx` Datei wird das erste Tabellenblatt eingelesen, es sei denn, sie enthält die Daten einer vorherigen Clusterung.  
           Diese werden automatisch erkannt und importiert.

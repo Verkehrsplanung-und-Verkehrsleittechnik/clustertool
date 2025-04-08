@@ -73,7 +73,7 @@ Die Clusteranalyse erfolgt in drei Schritten:
 
   $$ c_A =\frac{1}{|A|} \sum_{x_A \in A} x_A , \quad c_B =\frac{1}{|B|} \sum_{x_B \in B} x_B $$  
 
-**Quellen:** BACKHAUS et al. (2023), DOI: 10.1007/978-3-658-40465-9, scipy Doku + Quellen, Diss MaS  
+**Quellen:** BACKHAUS et al. (2023), DOI: 10.1007/978-3-658-40465-9, scipy Doku + Quellen
 
 ---
 
