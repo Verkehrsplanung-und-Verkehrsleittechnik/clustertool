@@ -378,22 +378,29 @@ class Clusterung:
     #
     # Additionally, it generates separate property distribution plots for each cluster property.
     #
+    # @param vertical_lines_series: number of time intervals for one count station
+    #
     # @return A tuple containing:
     #   - `fig_series`: A Plotly figure with two subplots (original & representative data).
     #   - `dict_fig_property`: A dictionary of property plots, where keys are property names and values are Plotly figures.
-    def plots_results(self):
+    def plots_results(self, vertical_lines=None):
         ## @var fig_series
         #  A Plotly figure with two subplots: original time-series data and representative cluster series.
 
         # Create subplots with two rows (original data & representative cluster series)
         fig_series = make_subplots(rows=2, cols=1,
-                                   shared_xaxes=True,
+                                   shared_xaxes='all',
+                                   shared_yaxes='all',
                                    subplot_titles=["", ""],
                                    vertical_spacing=0)
 
         # Plot the original and clustered series
         self.plot_data_series(fig_series)
         self.plot_cluster_series(fig_series, row_subplot=2, scale_width=True)
+
+        # Plot vertical lines if desired
+        if vertical_lines is not None:
+            self.add_vertical_lines(fig_series, vertical_lines)
 
         ## @var fontsize
         #  The font size for the plot labels.
@@ -413,10 +420,32 @@ class Clusterung:
             legend_font_size=fontsize,
             margin=dict(l=10, r=10, t=10, b=10),
             legend_tracegroupgap=0,
-            separators=",."
+            separators=",.",
+            # Achsen-Konfiguration explizit definieren
+            xaxis=dict(
+                showline=True, linewidth=0.5, linecolor='black', mirror=True
+            ),
+            yaxis=dict(
+                showline=True, linewidth=0.5, linecolor='black', mirror=True
+            ),
+            xaxis2=dict(
+                showline=True, linewidth=0.5, linecolor='black', mirror=True,
+                matches='x'  # Hier wird die X-Achse mit der ersten verknüpft
+            ),
+            yaxis2=dict(
+                showline=True, linewidth=0.5, linecolor='black', mirror=True
+            ),
+
+            # Layout settings for legend
+            legend=dict(
+                font=dict(
+                    size=fontsize,
+                    family=font
+                )
+            )
         )
-        fig_series.update_xaxes(showline=True, linewidth=0.5, linecolor='black', mirror=True)
-        fig_series.update_yaxes(showline=True, linewidth=0.5, linecolor='black', mirror=True)
+        # fig_series.update_xaxes(showline=True, linewidth=0.5, linecolor='black', mirror=True)
+        # fig_series.update_yaxes(showline=True, linewidth=0.5, linecolor='black', mirror=True)
 
         fig_series.update_xaxes(title="", row=1, col=1)
 
@@ -445,6 +474,29 @@ class Clusterung:
             dict_fig_property[col] = fig
 
         return fig_series, dict_fig_property
+
+    ## @brief Adds vertical lines in diagrams of series
+    #
+    # @param fig_series the figure to add vertical lines. Note: fig_series is changed directly, no return value.
+    # @param no_intervals number of intervals of a count station
+    def add_vertical_lines_series(self, fig_series, no_intervals_count_station):
+
+        # reset existing shapes
+        fig_series.layout.shapes = ()
+
+        interval = no_intervals_count_station
+        idx_max = self.data.shape[1]
+
+        list_vertical_lines_idx = [] # init list
+        while interval < idx_max:
+            x = self.data.columns[interval]
+            if isinstance(x, (float, int)):
+                x = float(x)- 0.5  # x zwischen den Messquerschnitten
+            fig_series.add_vline(x=x, line_width=1, line_dash="dash", line_color="black", row=1, col=1)
+            fig_series.add_vline(x=x, line_width=1, line_dash="dash", line_color="black", row=2, col=1)
+            # list_vertical_lines_idx.append(fig_series.layout.shapes[-1]) # store trace id, necessary for changes without new figure
+            interval += no_intervals_count_station
+
 
     ## @brief Plots the distribution of a given property within clusters.
     #
@@ -476,15 +528,57 @@ class Clusterung:
         # Compute the actual count of data points per category within each cluster
         df_long.loc[:, "Anzahl"] = df_long["Proportion"] * self.cluster_properties["counts"]
 
+        # Custom Colormap for weekdays
+        weekday_colors = {
+            "monday": '#008000',  # Grün
+            "tuesday": "#000080",  # Navy
+            "wednesday": "#00FFFF",  # Cyan
+            "thursday": "#0000FF",  # Blue
+            "friday": "#FF7F00",  # Orange
+            "saturday": "#FF0000",  # Red
+            "sunday": "#800000",  # Maroon
+            "Montag": '#008000',  # Grün
+            "Dienstag": "#000080",  # Navy
+            "Mittwoch": "#00FFFF",  # Cyan
+            "Donnerstag": "#0000FF",  # Blue
+            "Freitag": "#FF7F00",  # Orange
+            "Samstag": "#FF0000",  # Red
+            "Sonntag": "#800000"  # Maroon
+        }
+
+        # Map colors to categories (assumes 'Category' contains weekdays)
+        if property in ["Wochentag", "weekday"]:
+
+            dict_sort = {
+            "monday": 1,
+            "tuesday": 2,
+            "wednesday": 3,
+            "thursday": 4,
+            "friday": 5,
+            "saturday": 6,
+            "sunday": 7,
+            "Montag": 1,
+            "Dienstag": 2,
+            "Mittwoch": 3,
+            "Donnerstag": 4,
+            "Freitag": 5,
+            "Samstag": 6,
+            "Sonntag": 7,
+            }
+            df_long.sort_values(by="Category", key=lambda x: x.map(dict_sort), inplace=True)
+
+            color_sequence = [weekday_colors[day] for day in df_long['Category'].unique()]
+        else:
+            color_sequence = px.colors.qualitative.G10
+
         ## @var fig
         #  A Plotly figure containing the stacked bar chart.
-
         fig = px.bar(df_long,
              x='Anzahl',
              y=df_long.index,
              color='Category',
              orientation='h',  # Horizontal bar chart
-             color_discrete_sequence=px.colors.qualitative.G10
+             color_discrete_sequence=color_sequence
         )
 
         # Layout options for the stacked bar chart
@@ -613,12 +707,13 @@ class Clusterung:
         #  A dictionary mapping cluster labels to colors.
         dict_color = get_cluster_colors(self.clusters.unique())
 
-        ## @var colorscale
-        #  A color scale for Plotly based on the cluster mappings.
+        # ## @var colorscale
+        # #  A color scale for Plotly based on the cluster mappings.
         if -1 in dict_color.keys():
             colorscale = [[(cluster + 1) / len(dict_color), color] for cluster, color in dict_color.items()]
         else:
-            colorscale = [[(cluster) / len(dict_color), color] for cluster, color in dict_color.items()]
+            colorscale = [[(cluster - 1) / (len(dict_color) - 1), color] for cluster, color in dict_color.items()]
+
 
         ## @var df_plot
         #  A DataFrame containing cluster assignments and corresponding calendar attributes.
@@ -922,21 +1017,39 @@ class Clusterung:
     # @param col_subplot The subplot column index.
     # @param width The width of the line.
     def _add_trace_to_fig(self, fig, group, cluster, show_legend, dict_color, row_subplot=1, col_subplot=1, width=1, hovertext=None):
-        fig.add_trace(
-            go.Scatter(
-                x=group["index series"],
-                y=group["value"],
-                mode="lines",
-                name=f"Cluster {cluster}",
-                legendgroup=f"Cluster {cluster}",
-                showlegend=show_legend,
-                line=dict(color=dict_color[cluster], width=width),
-                text=hovertext if hovertext is not None else [""] * len(group),
-                hovertemplate="<b>%{text}</b><br>"  # Übergebener Hover-Text (z.B. Datum)
-                     "X-Wert: %{x}<br>"  # X-Wert (Index/Zählintervall)
-                     "Y-Wert: %{y:.2f}<br>"  # Y-Wert (Ganglinie)
-                     "<extra></extra>",  # Entfernt Standard-Tooltip
-            ), row = row_subplot, col = col_subplot)
+        if has_subplots(fig):
+            fig.add_trace(
+                go.Scatter(
+                    x=group["index series"],
+                    y=group["value"],
+                    mode="lines",
+                    name=f"Cluster {cluster}",
+                    legendgroup=f"Cluster {cluster}",
+                    showlegend=show_legend,
+                    line=dict(color=dict_color[cluster], width=width),
+                    text=hovertext if hovertext is not None else [""] * len(group),
+                    hovertemplate="<b>%{text}</b><br>"  # Übergebener Hover-Text (z.B. Datum)
+                         "X-Wert: %{x}<br>"  # X-Wert (Index/Zählintervall)
+                         "Y-Wert: %{y:.2f}<br>"  # Y-Wert (Ganglinie)
+                         "<extra></extra>",  # Entfernt Standard-Tooltip
+                ), row = row_subplot, col = col_subplot)
+        else:
+            fig.add_trace(
+                go.Scatter(
+                    x=group["index series"],
+                    y=group["value"],
+                    mode="lines",
+                    name=f"Cluster {cluster}",
+                    legendgroup=f"Cluster {cluster}",
+                    showlegend=show_legend,
+                    line=dict(color=dict_color[cluster], width=width),
+                    text=hovertext if hovertext is not None else [""] * len(group),
+                    hovertemplate="<b>%{text}</b><br>"  # Übergebener Hover-Text (z.B. Datum)
+                                  "X-Wert: %{x}<br>"  # X-Wert (Index/Zählintervall)
+                                  "Y-Wert: %{y:.2f}<br>"  # Y-Wert (Ganglinie)
+                                  "<extra></extra>",  # Entfernt Standard-Tooltip
+                ))
+
 
 
     ## @brief Determines the width of each cluster line for plotting.

@@ -7,16 +7,18 @@ if __name__ == "__main__":
     file_path = Path.cwd() / "data"  # Beispiel-Pfad zur Eingabedatei
 
     # Daten laden
-    data = modules.data_handler.load_and_prepare_data(file_path / "Netzganglinie2025.csv")
-    # data_attributes = modules.data_handler.load_and_prepare_data(file_path / "Eigenschaft_Wetter.mat")
+    data = modules.data_handler.load_and_prepare_data(file_path / "Ganglinien2008.csv")
+    data_attributes = modules.data_handler.load_and_prepare_data(file_path / "Eigenschaft_Wetter.mat")
 
     # Cluster-Objekt erstellen
-    clusterer = modules.clustering.Clusterung(data, attr_data=None,
+    clusterer = modules.clustering.Clusterung(data, attr_data=data_attributes,
                                               method="average", distance_function="SQV Counts", cutoff=0.8,
                                               kmeans_preset="random")
 
     # Clusterung durchführen
     clusterer.perform_clustering()
+    clusterer.plots_results()
+    fig_weekdays = clusterer.plot_properties("Wochentag")
     fig_dendrogram = clusterer.plot_dendrogramm()
     # series_info = clusterer.get_info()
 

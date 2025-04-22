@@ -127,7 +127,6 @@ def convert_to_datetime(idx_df):
             new_index = datenum_to_datetime(idx_df)
         except Exception as e:
             print(f"Error converting datenum: {e}")
-            new_index = idx_df
     elif isinstance(idx_df[0], str):
         # Versuche mehrere Datumsformate
         date_formats = ["%d.%m.%Y", 'ISO8601'] # ISO08601 deckt alle Kombinationen YYYY-mm-dd HH:MM:SS ab
@@ -444,7 +443,7 @@ def save_clusterung_to_excel(cluster_obj, filepath):
         if cluster_obj.properties_dates is not None:
             cluster_obj.properties_dates.to_excel(writer, sheet_name="Data Eigenschaften")
 
-        ## Save the cluster assignments.
+        ## Save the cluster assignments
         if cluster_obj.clusters is not None:
             cluster_obj.clusters.to_excel(writer, sheet_name="Clusterzuordnung")
 

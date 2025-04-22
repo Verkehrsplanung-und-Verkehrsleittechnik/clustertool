@@ -84,7 +84,8 @@ class ClusterGUI(wx.Frame):
             "Export alle Clusterungen": self.on_export_all_data,
             "Export Diagramme": self.on_export_diagrams,
             "Datei Clusterung öffnen": self.on_open_data,
-            "Datei öffnen": self.on_open_properties
+            "Datei öffnen": self.on_open_properties,
+            "Trennlinien aktualisieren": self.on_update_vertical_lines,
         }
 
         ## @var buttons
@@ -115,7 +116,12 @@ class ClusterGUI(wx.Frame):
         self.SetMinSize((1200, 600))
 
         # Set the initial window size when the application starts
-        self.SetSize((1400, 1000))  # Startgröße setzen
+        self.SetSize((1450, 1000))  # Startgröße setzen
+
+        # # Set the minimal button size
+        # for btn in self.buttons:
+        #     if btn.GetParent() != self.right_panel:  # Nur wenn der Button NICHT im right_panel ist
+        #         btn.SetMinSize(wx.Size(30, -1))
 
     ## @brief Defines the layout of the GUI components.
     #
@@ -129,6 +135,8 @@ class ClusterGUI(wx.Frame):
 
         ## Define padding for spacing between elements
         padding = 2
+        
+        default_flags = wx.ALL | wx.EXPAND #| wx.SHRINK
 
         ## @var panel
         #  Main container panel for the GUI
@@ -140,7 +148,7 @@ class ClusterGUI(wx.Frame):
 
         ## @var controls_panel
         #  Panel containing clustering settings and calendar controls
-        self.controls_panel = wx.Panel(self.top_panel, size=(-1, 150))
+        self.controls_panel = wx.Panel(self.top_panel)#, size=(-1, 130))
 
         ## @var main_sizer
         #  Main vertical sizer for the entire layout
@@ -163,7 +171,7 @@ class ClusterGUI(wx.Frame):
         # -----------------------------------
         ## @var cluster_group
         #  StaticBoxSizer containing clustering settings
-        cluster_group = wx.StaticBoxSizer(wx.VERTICAL, self.controls_panel, "Einstellung Clustering")
+        cluster_group = wx.StaticBoxSizer(wx.HORIZONTAL, self.controls_panel, "Einstellung Clusterung")
 
         ## @var cluster_method_choice
         #  Dropdown for selecting the clustering method
@@ -208,36 +216,46 @@ class ClusterGUI(wx.Frame):
                                           choices=["zufällige Auswahl", "Normalverteilung", "++ Algorithmus"])
 
         # Layout für Clustermethode
-        cluster_sizer_r1 = wx.BoxSizer(wx.HORIZONTAL)
-        cluster_sizer_r1.Add(wx.StaticText(self.controls_panel, label="Methode"), 0,
-                             wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
-        cluster_sizer_r1.Add(self.cluster_method_choice, 1, wx.EXPAND | wx.ALL, 5)
-        cluster_sizer_r1.AddSpacer(10)
-        cluster_sizer_r1.Add(wx.StaticText(self.controls_panel, label="Distanzfunktion"), 0,
-                             wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
-        cluster_sizer_r1.Add(self.cluster_distance_choice, 1, wx.EXPAND | wx.ALL, 5)
+        cluster_sizer_col1 = wx.BoxSizer(wx.VERTICAL)
+        cluster_sizer_col2 = wx.BoxSizer(wx.VERTICAL)
 
-        cluster_sizer_r2 = wx.BoxSizer(wx.HORIZONTAL)
-        cluster_sizer_r2.Add(self.use_max_clusters, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
-        cluster_sizer_r2.Add(self.max_clusters, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
-        # Spacer für zusätzlichen Abstand
-        cluster_sizer_r2.AddSpacer(20)
-        cluster_sizer_r2.Add(self.use_max_distance, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
-        cluster_sizer_r2.Add(self.max_distance, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
 
-        cluster_sizer_r3 = wx.BoxSizer(wx.HORIZONTAL)
-        cluster_sizer_r3.AddSpacer(10)
-        cluster_sizer_r3.Add(wx.StaticText(self.controls_panel, label="Kmeans Wiederholungen"), 0,
-                             wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
-        cluster_sizer_r3.Add(self.kmeans_repeats, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
-        cluster_sizer_r3.AddSpacer(20)
-        cluster_sizer_r3.Add(wx.StaticText(self.controls_panel, label="Kmeans Startbelegung"), 0,
-                             wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
-        cluster_sizer_r3.Add(self.kmeans_preselect, 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
+        cluster_sizer_r1c1 = wx.BoxSizer(wx.HORIZONTAL)
+        cluster_sizer_r1c1.Add(wx.StaticText(self.controls_panel, label="Methode"), 1,
+                             default_flags, padding)
+        cluster_sizer_r1c1.Add(self.cluster_method_choice, 0, default_flags, padding)
+        cluster_sizer_r1c2 = wx.BoxSizer(wx.HORIZONTAL)
+        cluster_sizer_r1c2.Add(wx.StaticText(self.controls_panel, label="Distanzfunktion"), 1,
+                             default_flags, padding)
+        cluster_sizer_r1c2.Add(self.cluster_distance_choice, 0, default_flags, padding)
+        cluster_sizer_col1.Add(cluster_sizer_r1c1, 1, default_flags, padding)
+        cluster_sizer_col2.Add(cluster_sizer_r1c2, 1, default_flags, padding)
 
-        cluster_group.Add(cluster_sizer_r1, 0, wx.EXPAND | wx.ALL, padding)
-        cluster_group.Add(cluster_sizer_r2, 0, wx.EXPAND | wx.ALL, padding)
-        cluster_group.Add(cluster_sizer_r3, 0, wx.EXPAND | wx.ALL, padding)
+        cluster_sizer_r2c1 = wx.BoxSizer(wx.HORIZONTAL)
+        cluster_sizer_r2c1.Add(self.use_max_clusters, 1, default_flags, padding)
+        cluster_sizer_r2c1.Add(self.max_clusters, 0, default_flags, padding)
+
+        cluster_sizer_r2c2 = wx.BoxSizer(wx.HORIZONTAL)
+        cluster_sizer_r2c2.Add(self.use_max_distance, 1, default_flags, padding)
+        cluster_sizer_r2c2.Add(self.max_distance, 0, default_flags, padding)
+
+        cluster_sizer_col1.Add(cluster_sizer_r2c1, 1, default_flags, padding)
+        cluster_sizer_col2.Add(cluster_sizer_r2c2, 1, default_flags, padding)
+
+        cluster_sizer_r3c1 = wx.BoxSizer(wx.HORIZONTAL)
+        cluster_sizer_r3c1.Add(wx.StaticText(self.controls_panel, label="Kmeans Wiederholungen"), 1,
+                             default_flags, padding)
+        cluster_sizer_r3c1.Add(self.kmeans_repeats, 0, default_flags, padding)
+        cluster_sizer_r3c2 = wx.BoxSizer(wx.HORIZONTAL)
+        cluster_sizer_r3c2.Add(wx.StaticText(self.controls_panel, label="Kmeans Startbelegung"), 1,
+                             default_flags, padding)
+        cluster_sizer_r3c2.Add(self.kmeans_preselect, 0, default_flags, padding)
+
+        cluster_sizer_col1.Add(cluster_sizer_r3c1, 1, default_flags, padding)
+        cluster_sizer_col2.Add(cluster_sizer_r3c2, 1, default_flags, padding)
+
+        cluster_group.Add(cluster_sizer_col1, 1, default_flags, padding)
+        cluster_group.Add(cluster_sizer_col2, 1, default_flags, padding)
 
         # -----------------------------------
         # Group 2: Calendar Settings
@@ -273,24 +291,26 @@ class ClusterGUI(wx.Frame):
         cal_checkboxes = wx.BoxSizer(wx.HORIZONTAL)
         for label in check_cal:
             checkbox = wx.CheckBox(self.controls_panel, label=label)
-            cal_checkboxes.Add(checkbox, 0, wx.ALL, 2)
+            cal_checkboxes.Add(checkbox, 0, default_flags, padding)
             self.checkboxes_calendar.append(checkbox)
 
         calendar_sizer_r1 = wx.BoxSizer(wx.HORIZONTAL)
         calendar_sizer_r2 = wx.BoxSizer(wx.HORIZONTAL)
-        calendar_sizer_r1.Add(self.use_calendar_properties, 0, wx.ALL | wx.EXPAND, 5)
+        calendar_sizer_r1.Add(self.use_calendar_properties, 0, default_flags, padding)
 
         calendar_sizer_r1.Add(wx.StaticText(self.controls_panel, label="Ferien Land"), 0,
-                              wx.ALIGN_CENTER_VERTICAL | wx.ALL, 5)
-        calendar_sizer_r1.Add(self.choice_state, 0, wx.ALL | wx.EXPAND, 5)
+                              wx.ALIGN_CENTER_VERTICAL | wx.ALL, padding)
+        calendar_sizer_r1.Add(self.choice_state, 0, default_flags, padding)
 
-        calendar_sizer_r2.Add(wx.StaticText(self.controls_panel, label="Erster Tag"), 0, wx.ALL | wx.EXPAND, 5)
-        calendar_sizer_r2.Add(self.start_date, 0, wx.ALL | wx.EXPAND, 2)
-        calendar_sizer_r2.Add(wx.StaticText(self.controls_panel, label="Letzter Tag"), 0, wx.ALL | wx.EXPAND, 5)
-        calendar_sizer_r2.Add(self.end_date, 0, wx.ALL | wx.EXPAND, 2)
-        calendar_group.Add(calendar_sizer_r2, 0, wx.ALL | wx.EXPAND, 5)
-        calendar_group.Add(cal_checkboxes, 0, wx.ALL | wx.EXPAND, 5)
-        calendar_group.Add(calendar_sizer_r1, 0, wx.ALL | wx.EXPAND, 5)
+        calendar_sizer_r2.Add(wx.StaticText(self.controls_panel, label="Erster Tag"), 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, padding)
+        calendar_sizer_r2.Add(self.start_date, 0, default_flags, padding)
+        calendar_sizer_r2.AddSpacer(40)
+        calendar_sizer_r2.Add(wx.StaticText(self.controls_panel, label="Letzter Tag"), 0, wx.ALIGN_CENTER_VERTICAL | wx.ALL, padding)
+        calendar_sizer_r2.Add(self.end_date, 0, default_flags, padding)
+
+        calendar_group.Add(calendar_sizer_r2, 1, default_flags, padding)
+        calendar_group.Add(cal_checkboxes, 1, default_flags, padding)
+        calendar_group.Add(calendar_sizer_r1, 1, default_flags, padding)
 
         # -----------------------------------
         # Group 3: Data Selection
@@ -322,26 +342,27 @@ class ClusterGUI(wx.Frame):
         self.text_properties = wx.StaticText(self.controls_panel)
 
         data_sizer_r1 = wx.BoxSizer(wx.HORIZONTAL)
-        data_sizer_r1.Add(wx.StaticText(self.controls_panel, label="Daten für die Clusterung"), 0, wx.ALL | wx.EXPAND,
-                          5)
-        data_sizer_r1.Add(data_button)
+        data_sizer_r1.Add(wx.StaticText(self.controls_panel, label="Daten für die Clusterung"), 1, 
+                          default_flags,
+                          padding)
+        data_sizer_r1.Add(data_button,  1, default_flags, padding)
         data_sizer_r3 = wx.BoxSizer(wx.HORIZONTAL)
-        data_sizer_r3.Add(self.use_properties, 0, wx.ALL | wx.EXPAND, 5)
-        data_sizer_r3.Add(properties_data_button)
+        data_sizer_r3.Add(self.use_properties, 1, default_flags, padding)
+        data_sizer_r3.Add(properties_data_button, 1, default_flags, padding)
 
-        data_group.Add(data_sizer_r1, 0, wx.ALL | wx.EXPAND, 5)
-        data_group.Add(self.text_data, 0, wx.ALL | wx.EXPAND, 5)
+        data_group.Add(data_sizer_r1, 1, default_flags, padding)
+        data_group.Add(self.text_data, 1, default_flags, padding)
         # data_group.Add(self.use_properties, 0, wx.ALL | wx.EXPAND, 5)
-        data_group.Add(data_sizer_r3)
-        data_group.Add(self.text_properties, 0, wx.ALL | wx.EXPAND, 5)
+        data_group.Add(data_sizer_r3, 1, default_flags, padding)
+        data_group.Add(self.text_properties, 1, default_flags, padding)
 
         # Hinzufügen der Gruppen zur Steuerleiste
-        controls_sizer.Add(data_group, 1, wx.EXPAND | wx.ALL, 5)
-        controls_sizer.Add(calendar_group, 1, wx.EXPAND | wx.ALL, 5)
-        controls_sizer.Add(cluster_group, 1, wx.EXPAND | wx.ALL, 5)
+        controls_sizer.Add(data_group, 1, default_flags, padding)
+        controls_sizer.Add(calendar_group, 1, default_flags, padding)
+        controls_sizer.Add(cluster_group, 1, default_flags, padding)
 
         self.controls_panel.SetSizer(controls_sizer)
-        vertical_sizer.Add(self.controls_panel, 0, wx.EXPAND | wx.ALL, 5)
+        vertical_sizer.Add(self.controls_panel, 0, default_flags, padding)
 
         # -----------------------------------
         # Middle Panel: Notebook with 2 Pages
@@ -358,11 +379,11 @@ class ClusterGUI(wx.Frame):
         # self.btn_extra = wx.Button(self.top_panel, label="Optionen")
 
         # Notebook und Button in den neuen Sizer einfügen
-        notebook_sizer.Add(self.notebook, 1, wx.EXPAND)
+        notebook_sizer.Add(self.notebook, 1, default_flags, padding)
         # notebook_sizer.Add(self.btn_extra, 0, wx.ALIGN_CENTER_VERTICAL | wx.LEFT, 10)
 
         # Den neuen Sizer in den vertikalen Hauptsizer einfügen
-        vertical_sizer.Add(notebook_sizer, 1, wx.EXPAND | wx.ALL, 5)
+        vertical_sizer.Add(notebook_sizer, 1, default_flags, padding)
 
         # -----------------------------------
         # Right Panel: Action Buttons
@@ -371,7 +392,6 @@ class ClusterGUI(wx.Frame):
         #  Panel containing action buttons
         self.right_panel = wx.Panel(self.top_panel)
         right_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.right_panel.SetSizer(right_sizer)
 
         ## @var buttons_right
         #  List of button labels for clustering actions
@@ -380,16 +400,21 @@ class ClusterGUI(wx.Frame):
                          "Distanzmatrix der Ganglinien",
                          "Clusterkalender", "Export Clusterung", "Export alle Clusterungen", "Export Diagramme"]
 
+        # button_width = 160  # Hier die gewünschte feste Breite festlegen
+
         for label in buttons_right:
             button = wx.Button(self.right_panel, label=label)
+            # button.SetInitialSize(wx.Size(button_width, -1))  # Setze die feste Breite
             if label == "Clusterung ausführen":
-                right_sizer.Add(button, 2, wx.ALL | wx.EXPAND, 5)
+                right_sizer.Add(button, 2, wx.ALL | wx.EXPAND, padding)
             else:
-                right_sizer.Add(button, 1, wx.ALL | wx.EXPAND, 5)
+                right_sizer.Add(button, 1, wx.ALL | wx.EXPAND, padding)
             self.buttons.append(button)
 
-        horizontal_sizer.Add(vertical_sizer, 1, wx.EXPAND)
-        horizontal_sizer.Add(self.right_panel, 0, wx.EXPAND | wx.ALL, 5)
+        self.right_panel.SetSizer(right_sizer)
+
+        horizontal_sizer.Add(vertical_sizer, 1, default_flags, padding)
+        horizontal_sizer.Add(self.right_panel, 0, wx.ALL | wx.EXPAND, padding)
 
         self.top_panel.SetSizer(horizontal_sizer)
 
@@ -403,6 +428,8 @@ class ClusterGUI(wx.Frame):
         plot_sizer = wx.BoxSizer(wx.HORIZONTAL)
         plot_left_sizer = wx.BoxSizer(wx.VERTICAL)
         plot_left_r1 = wx.BoxSizer(wx.HORIZONTAL)
+        plot_right_sizer = wx.BoxSizer(wx.VERTICAL)
+        plot_right_r1 = wx.BoxSizer(wx.HORIZONTAL)
 
         ## @var plot_view_left
         #  WebView for displaying left-side plots
@@ -415,20 +442,43 @@ class ClusterGUI(wx.Frame):
         #  Dropdown for selecting the property to be visualized in the left plot
         self.choice_property_plot = wx.Choice(self.plot_panel)
 
-        plot_left_r1.Add(wx.StaticText(self.plot_panel, label="Auswahl Eigenschaft"), 1, wx.ALL | wx.EXPAND, 5)
-        plot_left_r1.Add(self.choice_property_plot, 1, wx.ALL, 5)
-        plot_left_sizer.Add(plot_left_r1, 0, wx.EXPAND | wx.ALL, 5)
-        plot_left_sizer.Add(self.plot_view_left, 1, wx.EXPAND | wx.ALL, 5)
-        plot_sizer.Add(plot_left_sizer, 1, wx.EXPAND | wx.ALL, 5)
-        plot_sizer.Add(self.plot_view_right, 2, wx.EXPAND | wx.ALL, 5)
+        ## @var vertical_lines
+        #  Spinner control for setting the time intervals between vertical lines
+        self.vertical_lines = wx.SpinCtrl(self.plot_panel, min=1, initial=24)
+
+        ## @var use_vertical_lines
+        #  Checkbox to enable vertical lines in time series plots
+        self.use_vertical_lines = wx.CheckBox(self.plot_panel, label="Unterteilung Ganglinien einzelner Messquerschnitte alle")
+
+        btn = wx.Button(self.plot_panel, label="Trennlinien aktualisieren")
+        self.buttons.append(btn)
+
+        plot_left_r1.AddSpacer(2)
+        plot_left_r1.Add(wx.StaticText(self.plot_panel, label="Auswahl Eigenschaft"), 0, wx.ALL, padding)
+        plot_left_r1.AddSpacer(10)
+        plot_left_r1.Add(self.choice_property_plot, 0, wx.ALL, padding)
+        plot_left_sizer.Add(plot_left_r1, 0, default_flags, padding)
+        plot_left_sizer.Add(self.plot_view_left, 1, default_flags, padding)
+
+        plot_right_r1.Add(self.use_vertical_lines, 0, default_flags, padding)
+        plot_right_r1.Add(self.vertical_lines, 0, default_flags, padding)
+        plot_right_r1.Add(wx.StaticText(self.plot_panel, label=" Zählintervalle"), 0, default_flags, padding)
+        plot_right_r1.AddSpacer(20)
+        plot_right_r1.Add(btn, 0, default_flags, padding)
+
+        plot_right_sizer.Add(plot_right_r1, 0, default_flags, padding)
+        plot_right_sizer.Add(self.plot_view_right, 1, default_flags, padding)
+
+        plot_sizer.Add(plot_left_sizer, 1, default_flags, padding)
+        plot_sizer.Add(plot_right_sizer, 2, default_flags, padding)
 
         self.plot_panel.SetSizer(plot_sizer)
 
         # -----------------------------------
         # Apply Layouts
         # -----------------------------------
-        main_sizer.Add(self.top_panel, 2, wx.EXPAND | wx.ALL, 5)
-        main_sizer.Add(self.plot_panel, 3, wx.EXPAND | wx.ALL, 5)
+        main_sizer.Add(self.top_panel, 2, default_flags, padding)
+        main_sizer.Add(self.plot_panel, 3, default_flags, padding)
         self.panel.SetSizer(main_sizer)
 
     ## @brief Binds event handlers to UI components.
@@ -561,11 +611,11 @@ class ClusterGUI(wx.Frame):
                 self.start_date.SetValue(start_date)
                 self.end_date.SetValue(end_date)
 
-                # Generate plots for the loaded clustering result.
-                clusterer.plots_results()
-
                 # Add the loaded clustering result to the analysis.
                 self._add_clusterung(clusterer)
+
+                # Generate plots for the loaded clustering result.
+                clusterer.plots_results()
 
                 logging.info("Clusterdatei importiert")
 
@@ -647,7 +697,21 @@ class ClusterGUI(wx.Frame):
         # Ensure that k-means clustering has a valid cluster count.
         if method == "kmeans" and max_clusters is None:
             logging.error("Parameterkombination ist ungültig: Bei kmeans muss die Anzahl an Clustern definiert werden")
+            wx.MessageBox('Clusterung nicht möglich - Parameterkombination ungültig',
+                          'Clusterung ausführen',
+                          wx.OK | wx.ICON_INFORMATION)
             return
+
+        distance_fcn = self.cluster_distance_choice.GetString(
+                    self.cluster_distance_choice.GetCurrentSelection()
+                )
+        if distance_fcn == "SQV Counts" and max_distance > 1:
+            logging.error("Parameterkombination ist ungültig: Wertebereich SQV zwischen 0 und 1")
+            wx.MessageBox('Clusterung nicht möglich - Wertebereich CutOff ungültig',
+                          'Clusterung ausführen',
+                          wx.OK | wx.ICON_INFORMATION)
+            return
+
 
         # Update calendar-based properties if required.
         self._check_update_calendar()
@@ -675,9 +739,7 @@ class ClusterGUI(wx.Frame):
                 data,
                 attr_data=data_properties,
                 method=method,
-                distance_function=self.cluster_distance_choice.GetString(
-                    self.cluster_distance_choice.GetCurrentSelection()
-                ),
+                distance_function=distance_fcn,
                 cutoff=max_distance,
                 max_clusters=max_clusters,
                 kmeans_iter=self.kmeans_repeats.GetValue() if method == "kmeans" else None,
@@ -1014,6 +1076,38 @@ class ClusterGUI(wx.Frame):
 
         # Destroy the menu after selection.
         menu.Destroy()
+
+
+    ## @brief Handles the events when the value of the spin control for vertical lines ore the checkbox are changed.
+    #
+    # This method retrieves the state of the checkbox and the value of the spin control.
+    # If the checkbox is checked, the value of the spin control is used to update the plot.
+    # If the checkbox is unchecked, None is used to remove the vertical lines from the plot.
+    #
+    # @return None
+    def on_update_vertical_lines(self, event=None):
+        try:
+            # Retrieve the active cluster object.
+            clusterobj = self.cluster_analyses[self.active_cluster]["Clusterobjekt"]
+            fig = self.cluster_analyses[self.active_cluster]["Plot Ganglinien"]
+        except KeyError:
+            logging.error("Kein gültiges Clusterobjekt ausgewählt")
+            return
+
+        is_checked = self.use_vertical_lines.GetValue()
+
+        if is_checked:
+            vertical_lines_value = self.vertical_lines.GetValue()
+            clusterobj.add_vertical_lines_series(fig, vertical_lines_value)
+
+            self._update_plot_right(self.active_cluster)
+
+        else:
+            fig.layout.shapes = () # delete vertical lines and other shapes
+            return
+
+
+
 
     ## @brief Opens a file dialog for selecting a data file.
     #
@@ -1400,6 +1494,9 @@ class ClusterGUI(wx.Frame):
         # Add the clustering result to the main GUI table
         self.tabMain.add_row(id, clusteranalysis)
 
+        # Update Plots if necessary
+        self.on_update_vertical_lines()
+
 
 ## @class MainTab
 #  @brief A wxPython-based tab for managing clustering analyses.
@@ -1523,6 +1620,7 @@ class MainTab(wx.ScrolledWindow):
 
         # Update plots and property selection
         choice_items = self.TopLevelParent.cluster_analyses[id]["Clusterobjekt"].cluster_properties.columns.tolist()
+        choice_items.remove("counts")
         self.TopLevelParent.choice_property_plot.SetItems(choice_items)
         self.TopLevelParent.choice_property_plot.SetStringSelection(self.TopLevelParent.default_property)
         self.TopLevelParent._update_plot_left(id, self.TopLevelParent.choice_property_plot.GetStringSelection())

@@ -611,6 +611,8 @@ def fetch_bank_holidays_from_api(state: str, years: list, country: str, language
             logging.warning("Abfrage Feiertage war erfolglos. Internetverbindung ist notwendig")
 
     return holiday_dict
+
+
     
     
 if __name__ == '__main__':
