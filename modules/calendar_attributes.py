@@ -449,6 +449,71 @@ class CalendarAttributes:
             else:
                 logging.error(f"Failed to import school holidays for {self.state}.")
 
+    ## @brief Filters the data indices based on selected calendar properties.
+    #
+    #  This method applies filtering criteria such as weekdays, holidays, and date range
+    #  to determine which time-series data should be included in the clustering process.
+    #
+    #  @return A list of filtered datetime indices that match the selected criteria.
+    def _get_filtered_indices_data(self, indices: pd.DatetimeIndex,
+                                   days_to_include: list=None,
+                                   include_bank_holidays: bool=True,
+                                   include_school_holidays: bool=True,
+                                   start_date: datetime.date=None, end_date: datetime.date=None):
+
+        # 4. Initiale Liste der Datetime-Indizes im Dataset
+        filtered_indices = indices
+
+        # 5. Filtern der Wochentage
+        if len(days_to_include) < 7:
+            num_char_day = len(days_to_include[0])
+            weekdays = getattr(self, "wochentag", getattr(self, "weekday", {}))
+            dict_keys = {key[:num_char_day]: key for key in weekdays.keys()}
+            day_short = [dict_keys[day] for day in days_to_include]
+            days = [date for day in day_short for date in
+                    (weekdays[day].date.tolist() if isinstance(weekdays[day], pd.DatetimeIndex) else weekdays[day])]
+            days = pd.to_datetime(days)
+            days = pd.to_datetime(days)
+            filtered_indices = filtered_indices[filtered_indices.isin(days)]
+
+        # 6. Filtern der Feiertage und Ferien
+        holidays = set()
+
+        if include_school_holidays and include_bank_holidays:
+            pass
+        elif not include_school_holidays and not include_bank_holidays:
+            feiertage = getattr(self, "feiertage", getattr(self, "bank_holidays", {}))
+            ferien = getattr(self, "ferien",
+                                 getattr(self, "school_holidays", []))
+            if len(feiertage) > 0:
+                holidays.update({date for dates in feiertage.values() for date in dates})
+            if len(ferien) > 0:
+                holidays.update({date for dates in ferien.values() for date in dates})
+
+        elif not include_bank_holidays:
+            feiertage = getattr(self, "feiertage", getattr(self, "bank_holidays", {}))
+            if len(feiertage) > 0:
+                holidays.update({date for dates in feiertage.values() for date in dates})
+        elif not include_school_holidays:
+            ferien = getattr(self, "ferien",
+                                 getattr(self, "school_holidays", []))
+            if len(ferien) > 0:
+                holidays.update({date for dates in ferien.values() for date in dates})
+        else:
+            logging.error("Unvorhergesehener Fall beim Filtern von Feiertagen und Ferien.")
+
+        # Falls Feiertage vorhanden sind, diese herausfiltern
+        if len(holidays) > 0:
+            holidays = pd.to_datetime(list(holidays))
+            filtered_indices = filtered_indices[~filtered_indices.isin(holidays)]
+
+        filtered_indices = filtered_indices[(filtered_indices >= start_date) & (filtered_indices <= end_date)].date
+
+        # Logging der gefilterten Daten
+        logging.info(f"Es werden {len(filtered_indices)} von {len(indices)} Ganglinien berücksichtigt")
+
+        return filtered_indices
+
 
 
 ## @brief Expands and saves school holiday data for a given range of years.
@@ -528,7 +593,7 @@ def fetch_school_holidays_from_api(state: str, year: int, max_retries=5):
 
             if attempts < max_retries:
                 print("Retrying in 30 seconds...")
-                time.sleep(30)  # Wait before retrying
+                time.sleep(0)  # Wait before retrying
 
     print(f"Error: Failed to fetch data for {state} {year} after {max_retries} attempts.")
     return None
