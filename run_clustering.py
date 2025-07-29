@@ -1,6 +1,9 @@
 import modules
 from pathlib import Path
 
+# Instanz ConfigManager
+from modules.data_handler import config_manager
+
 
 ## @brief Hauptprogramm: Führt die Clusterung mit voreingestellten Parametern durch.
 if __name__ == "__main__":
@@ -13,11 +16,14 @@ if __name__ == "__main__":
     # Cluster-Objekt erstellen
     clusterer = modules.clustering.Clusterung(data, attr_data=data_attributes,
                                               method="average", distance_function="SQV Counts", cutoff=0.8,
-                                              kmeans_preset="random")
+                                              kmeans_preset="random",
+                                              config_manager=config_manager)
 
     # Clusterung durchführen
     clusterer.perform_clustering()
-    clusterer.plots_results()
+    clusterer.calculate_indicators_cs()
+    fig = clusterer.plots_results()
+    clusterer.config.write_colors("test.json")
     fig_weekdays = clusterer.plot_properties("Wochentag")
     fig_dendrogram = clusterer.plot_dendrogramm()
     # series_info = clusterer.get_info()

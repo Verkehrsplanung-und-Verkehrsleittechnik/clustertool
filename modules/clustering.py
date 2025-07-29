@@ -22,6 +22,7 @@
 #  @date 2025
 #
 #  @note The module relies on SciPy for clustering and Plotly for visualization.
+import datetime
 
 import numpy as np
 import pandas as pd
@@ -51,39 +52,64 @@ class Clusterung:
     #  @param kmeans_iter Number of iterations for kmeans clustering.
     #  @param kmeans_preset Preset configurations for kmeans clustering.
     #  @param use_calendar Boolean flag to use calendar attributes.
-    def __init__(self, data: pd.DataFrame, attr_data=None, calendar_obj=None, method="average",
-                 distance_function="euclidean", max_clusters=None, cutoff=None,
-                 kmeans_iter=None, kmeans_preset=None, use_calendar=True, f_sqv=1000):
+    def __init__(self, data: pd.DataFrame, attr_data=None, calendar_obj=None, method=None,
+                 distance_function=None, max_clusters=None, cutoff=None,
+                 kmeans_iter=None, kmeans_preset=None, use_calendar=True, f_sqv=None,
+                 config_manager=None
+                 ):
+
+        self.config = config_manager or modules.data_handler.ConfigManager()
 
         ## @var method
         #  Selected clustering method (e.g., "average", "kmeans").
-        self.method = method
+        if method is None:
+            self.method = self.config.get_cluster_attribute("default_method")
+        else:
+            self.method = method
 
         ## @var distance_function
         #  Distance metric used for clustering (e.g., "euclidean", "geh").
-        self.distance_function = distance_function.replace(" ", "_").lower()
+        if distance_function is None:
+            self.distance_function = self.config.get_cluster_attribute("default_distance_function").replace(" ", "_").lower()
+        else:
+            self.distance_function = distance_function.replace(" ", "_").lower()
 
         ## @var max_clusters
         #  Maximum number of clusters for clustering methods that require it.
-        self.max_clusters = max_clusters
+        if max_clusters is None:
+            self.max_clusters = self.config.get_cluster_attribute("default_max_clusters")
+        else:
+            self.max_clusters = max_clusters
 
         ## @var cutoff
         #  Distance cutoff for hierarchical clustering.
-        self.cutoff = cutoff
+        if cutoff is None:
+            self.cutoff = self.config.get_cluster_attribute("default_cutoff")
+        else:
+            self.cutoff = cutoff
 
         ## @var kmeans_iter
         #  Number of iterations for k-means clustering.
-        self.kmeans_iter = kmeans_iter
+        if kmeans_iter is None:
+            self.kmeans_iter = self.config.get_cluster_attribute("default_kmeans_iterations")
+        else:
+            self.kmeans_iter = kmeans_iter
 
         ## @var kmeans_presettings
         #  Mapping of k-means preset configuration names to algorithmic settings.
-        self.kmeans_presettings = {"zufällige Auswahl": "points",
+        if kmeans_preset is None:
+            self.kmeans_presettings = self.config.get_cluster_attribute("default_kmeans_presettings")
+        else:
+            self.kmeans_presettings = {"zufällige Auswahl": "points",
                                    "Normalverteilung": "random",
                                    "++ Algorithmus": "++"}.get(kmeans_preset, kmeans_preset)
 
         ## @var factor_sqv
         #  Scaling factor for SQV-based distance functions.
-        self.factor_sqv = f_sqv
+        if f_sqv is None:
+            self.factor_sqv = self.config.get_cluster_attribute("scaling_factor_sqv")
+        else:
+             self.factor_sqv = f_sqv
 
         ## @var data
         #  Input DataFrame containing time-series data to be clustered.
@@ -145,6 +171,15 @@ class Clusterung:
 
         # Process properties and map to attributes
         self._fill_properties_dates()
+
+        ## @var n_count_intervals
+        # Number of count intervals per day and count station.
+        # It is used to calculate indicators per count station in concatenated time profiles.
+        self.n_count_intervals = 24
+
+        self.indicators_clusters = {}
+
+        self.indicators_data = {}
 
     ## @brief Adds calendar-based properties to the properties dictionary.
     #
@@ -223,34 +258,14 @@ class Clusterung:
             # Apply k-means clustering.
             #  - `centroid`: The centroids of the clusters.
             #  - `cluster_index`: The cluster assignments for each data point.
-            centroid, cluster_index = kmeans2(data_values, self.max_clusters, minit=self.kmeans_presettings,
+            centroid, cluster_index = kmeans2(data_values.astype(float), self.max_clusters, minit=self.kmeans_presettings,
                                               iter=self.kmeans_iter)
 
+            cluster_index += 1 # default indices star with 0
+            self._calculate_distance_matrix(return_vector=False)
         else:
-            ## Extract numerical values from the dataset.
-            data_values = self.data.values
 
-            ## Identify indices of rows that contain valid data (non-empty rows).
-            self.index_not_nan = self.data.loc[~self.data.isna().all(axis=1)].index
-
-            ## Log warning if rows are removed due to empty data.
-            if data_values.shape[0] < len(self.index_not_nan):
-                logging.warning(f"Es werden Datensätze ohne Daten gelöscht."
-                                f"Von {len(self.index_not_nan)} Datensätzen werden {data_values.shape[0]} verwendet.")
-
-            ## Compute pairwise distances using the selected distance function.
-            distance_vector = self._calculate_distance_vector(data_values)
-
-            ## Define the linkage method for hierarchical clustering.
-            method = self.method.lower().replace(" linkage", "")
-
-            # Create a distance matrix as a Pandas DataFrame.
-            self.distance_matrix = pd.DataFrame(squareform(distance_vector), columns=self.data.index, index=self.data.index)
-
-            # Adjust distance values if "sqv" is used as a distance function.
-            if "sqv" in self.distance_function:
-                np.fill_diagonal(self.distance_matrix.values, 1)  # Set diagonal values to 1
-                distance_vector = 1 - distance_vector  # Invert values: 0 = optimal match, 1 = no match
+            distance_vector, method = self._calculate_distance_matrix(return_vector=True)
 
             # Perform hierarchical clustering using the selected method.
             linkage_matrix = linkage(distance_vector[~np.isnan(distance_vector)], method=method)
@@ -260,6 +275,9 @@ class Clusterung:
 
             # Store linkage result for later use (e.g., dendrogram visualization).
             self.linkage_matrix = linkage_matrix
+
+            # # Compute silhouette scores to assess clustering quality.
+            # self._calculate_silhouette() # muss nach assign_clusters kommen bzw wird beim SIlhuettenplot kalkuliert
 
         # Assign clusters to the data.
         self._assign_clusters(cluster_index)
@@ -271,8 +289,6 @@ class Clusterung:
         # Evaluate cluster properties (e.g., distribution of categorical attributes).
         self._evaluate_properties_cluster()
 
-        # Compute silhouette scores to assess clustering quality.
-        self._calculate_silhouette()
         logging.info("Eigenschaften der Cluster und repräsentative Ganglinien ermittelt")
 
 
@@ -289,7 +305,7 @@ class Clusterung:
 
         # If "euclidean" is selected, use SciPy's built-in function unless NaNs are present
         if self.distance_function in ['euclidean']:
-            distance_func = getattr(modules.metrics, self.distance_function) if any(np.isnan(data_values)) \
+            distance_func = getattr(modules.metrics, self.distance_function) if np.isnan(data_values).any() \
                 else self.distance_function
 
         # If "sqv" or "sqv_counts" is selected, use a partial function with the scaling factor `f_sqv`
@@ -302,6 +318,7 @@ class Clusterung:
 
         # Compute pairwise distances using the selected function
         return pdist(data_values, distance_func)
+
 
     ## @brief Determines clusters from the hierarchical linkage matrix.
     #
@@ -351,6 +368,157 @@ class Clusterung:
 
         return new_labels
 
+    ## @brief Sets the number of count intervals per day and count station.
+    #
+    #  This internal method validates and sets the number of count intervals
+    #  used to calculate indicators per count station in concatenated time profiles.
+    #
+    #  @param value The new number of count intervals
+    #  @throws ValueError If the value is not a positive integer
+    def _set_count_intervals(self, value):
+        if not isinstance(value, int):
+            raise ValueError("n_count_intervals must be an integer")
+        if value <= 0:
+            raise ValueError("n_count_intervals must be greater than 0")
+
+        self.n_count_intervals = value
+
+
+    def _calculate_distance_matrix(self, return_vector):
+        ## Extract numerical values from the dataset.
+        data_values = self.data.values
+
+        ## Identify indices of rows that contain valid data (non-empty rows).
+        self.index_not_nan = self.data.loc[~self.data.isna().all(axis=1)].index
+
+        ## Log warning if rows are removed due to empty data.
+        if data_values.shape[0] < len(self.index_not_nan):
+            logging.warning(f"Es werden Datensätze ohne Daten gelöscht."
+                            f"Von {len(self.index_not_nan)} Datensätzen werden {data_values.shape[0]} verwendet.")
+
+        ## Compute pairwise distances using the selected distance function.
+        distance_vector = self._calculate_distance_vector(data_values)
+
+        ## Define the linkage method for hierarchical clustering.
+        method = self.method.lower().replace(" linkage", "")
+
+        # Create a distance matrix as a Pandas DataFrame.
+        self.distance_matrix = pd.DataFrame(squareform(distance_vector), columns=self.data.index, index=self.data.index)
+
+        # Adjust distance values if "sqv" is used as a distance function.
+        if "sqv" in self.distance_function:
+            np.fill_diagonal(self.distance_matrix.values, 1)  # Set diagonal values to 1
+            distance_vector = 1 - distance_vector  # Invert values: 0 = optimal match, 1 = no match
+
+        if return_vector:
+            return distance_vector, method
+
+
+    ## @brief Calculates indicators for data and/or clusters using vectorized operations.
+    #
+    # This method calculates indicators for raw data and/or clusters based on the specified parameter.
+    # It uses vectorized operations and dictionary comprehensions for improved performance.
+    # For each count station, indicators are calculated using the n_count_intervals attribute.
+    # Cluster indicators are only calculated if clustering has been performed.
+    #
+    # @param calc_for String specifying what to calculate indicators for: "data", "clusters", or "both".
+    # @return A tuple of two DataFrames: (indicators_data, indicators_clusters). Either may be None if not calculated.
+    def calculate_indicators_cs(self, calc_for="both"):
+        # Performance optimization note:
+        # This method has been optimized to use vectorized operations and efficient pandas techniques:
+        # 1. Dictionary comprehensions instead of explicit loops
+        # 2. Direct DataFrame creation and assignment instead of cell-by-cell operations
+        # 3. Batch processing of results before assignment to minimize DataFrame modifications
+        # 4. Grouped column assignments where possible to leverage pandas' optimized operations
+
+        logging.info("Start Berechnung der Ganglinienindikatoren")
+
+        # Indicators and implementation - mapping indicator names to their calculation functions
+        dict_indicators_calc = {
+            "TV": partial(modules.indicators.calculate_tv, n_intervals=self.n_count_intervals),
+            "avg": modules.indicators.calculate_mean,
+            "SP": partial(modules.indicators.identify_peak_hour, period='day', is_locale=True,
+                          n_intervals=self.n_count_intervals),  # Standardfall mit period='day'
+            "SP_am": partial(modules.indicators.identify_peak_hour, period='am', is_locale=True,
+                          n_intervals=self.n_count_intervals),
+            "SP_pm": partial(modules.indicators.identify_peak_hour, period='pm', is_locale=True,
+                          n_intervals=self.n_count_intervals)
+        }
+
+        # Check if the parameter is valid
+        if calc_for not in ["data", "clusters", "both"]:
+            logging.warning(f"Invalid value for calc_for: {calc_for}. Must be one of: 'data', 'clusters', 'both'")
+            return
+
+        self.calculate_series_cs()
+
+        if any(self.series_cs.str.len() != self.n_count_intervals):
+            logging.warning(f"Error Assignment of count stations: length intervals != n_count_intervals")
+
+        # Calculate indicators for raw data if requested
+        if calc_for in ["data", "both"]:
+            # Check if indicators for data already exist
+            indicators_exist = all(indicator in self.indicators_data for indicator in dict_indicators_calc.keys())
+            if not indicators_exist:
+                self.indicators_data = self._calculate_indicators_for_data(self.data, dict_indicators_calc)
+            else:
+                logging.info("Indicators for data already exist. Skipping calculation.")
+
+        # Calculate indicators for clusters if requested and clustering has been performed
+        if calc_for in ["clusters", "both"]:
+            # Check if clustering has been performed
+            if self.representative_series is None:
+                logging.warning("Clustering has not been performed yet. Cannot calculate indicators for clusters.")
+                return
+
+            self.indicators_clusters = self._calculate_indicators_for_data(self.representative_series, dict_indicators_calc)
+
+        logging.info("Indicators calculated")
+
+
+
+    def calculate_indicators_global(self, calc_for="both"):
+        logging.info("Start Berechnung der Netzganglinienindikatoren (global)")
+
+        # Indicators and implementation - mapping indicator names to their calculation functions
+        dict_indicators_calc = {
+            "TV": partial(modules.indicators.calculate_tv, n_intervals=self.n_count_intervals),
+            "avg": modules.indicators.calculate_mean,
+            "SP": partial(modules.indicators.identify_peak_hour, period='day', is_locale=False,
+                          n_intervals=self.n_count_intervals),  # Standardfall mit period='day'
+            "SP_am": partial(modules.indicators.identify_peak_hour, period='am', is_locale=False,
+                          n_intervals=self.n_count_intervals),
+            "SP_pm": partial(modules.indicators.identify_peak_hour, period='pm', is_locale=False,
+                          n_intervals=self.n_count_intervals)
+        }
+
+        # Check if the parameter is valid
+        if calc_for not in ["data", "clusters", "both"]:
+            logging.warning(f"Invalid value for calc_for: {calc_for}. Must be one of: 'data', 'clusters', 'both'")
+            return
+
+        self.indicators_data_global = getattr(self, "indicators_data_global", {})
+        self.indicators_cluster_global = getattr(self, "indicators_cluster_global", {})
+
+        # Calculate indicators for raw data if requested
+        if calc_for in ["data", "both"]:
+            for key, function_ind in dict_indicators_calc.items():
+                self.indicators_data_global[key] = function_ind(self.data)
+
+        # Calculate indicators for clusters if requested and clustering has been performed
+        if calc_for in ["clusters", "both"]:
+            # Check if clustering has been performed
+            if self.representative_series is None:
+                logging.warning("Clustering has not been performed yet. Cannot calculate indicators for clusters.")
+                return
+
+            for key, function_ind in dict_indicators_calc.items():
+                self.indicators_cluster_global[key] = function_ind(self.representative_series)
+
+        logging.info("Indicators calculated")
+
+
+
 
     ## @brief Assigns the calculated cluster labels to the dataset.
     #
@@ -367,8 +535,12 @@ class Clusterung:
         if len(cluster_index) == len(self.index_not_nan):
             cluster_index = pd.Series(cluster_index, index=self.index_not_nan)
             self.clusters.loc[cluster_index.index] = cluster_index
+        elif self.method == "kmeans":
+            cluster_index = pd.Series(cluster_index, index=self.data.index)
+            self.clusters.loc[cluster_index.index] = cluster_index
         else:
             raise ValueError("Debug - Assignment of indices is wrong")
+
 
     ## @brief Generates and returns plots of clustering results.
     #
@@ -475,6 +647,7 @@ class Clusterung:
 
         return fig_series, dict_fig_property
 
+
     ## @brief Adds vertical lines in diagrams of series
     #
     # @param fig_series the figure to add vertical lines. Note: fig_series is changed directly, no return value.
@@ -528,27 +701,8 @@ class Clusterung:
         # Compute the actual count of data points per category within each cluster
         df_long.loc[:, "Anzahl"] = df_long["Proportion"] * self.cluster_properties["counts"]
 
-        # Custom Colormap for weekdays
-        weekday_colors = {
-            "monday": '#008000',  # Grün
-            "tuesday": "#000080",  # Navy
-            "wednesday": "#00FFFF",  # Cyan
-            "thursday": "#0000FF",  # Blue
-            "friday": "#FF7F00",  # Orange
-            "saturday": "#FF0000",  # Red
-            "sunday": "#800000",  # Maroon
-            "Montag": '#008000',  # Grün
-            "Dienstag": "#000080",  # Navy
-            "Mittwoch": "#00FFFF",  # Cyan
-            "Donnerstag": "#0000FF",  # Blue
-            "Freitag": "#FF7F00",  # Orange
-            "Samstag": "#FF0000",  # Red
-            "Sonntag": "#800000"  # Maroon
-        }
-
         # Map colors to categories (assumes 'Category' contains weekdays)
         if property in ["Wochentag", "weekday"]:
-
             dict_sort = {
             "monday": 1,
             "tuesday": 2,
@@ -567,9 +721,10 @@ class Clusterung:
             }
             df_long.sort_values(by="Category", key=lambda x: x.map(dict_sort), inplace=True)
 
-            color_sequence = [weekday_colors[day] for day in df_long['Category'].unique()]
-        else:
-            color_sequence = px.colors.qualitative.G10
+        color_sequence = self.config.get_colors(property, flag_property=True)
+
+        if isinstance(color_sequence, dict):
+            color_sequence = [color_sequence[day] for day in df_long['Category'].unique()]
 
         ## @var fig
         #  A Plotly figure containing the stacked bar chart.
@@ -613,7 +768,7 @@ class Clusterung:
             fig = go.Figure()
 
         # Define or use provided dictionary to determine line colors for each cluster
-        dict_color = get_cluster_colors(self.clusters.unique())
+        dict_color = self._get_cluster_colors()
 
         # Track clusters already added to the legend
         cluster_in_legend = set()
@@ -624,7 +779,7 @@ class Clusterung:
         df_plot.sort_values(by=["cluster"], inplace=True)
         df_plot = pd.melt(df_plot.reset_index(names=["index"]), id_vars=["index", "cluster", "series"],
                           value_vars=df_plot.columns.to_list(),
-                          var_name="index series"
+                          var_name="index_series"   # Spaltennamen/Index
                           )
 
         # Add each cluster's data series to the plot
@@ -632,8 +787,30 @@ class Clusterung:
             cluster = group['cluster'].iloc[0]
             cluster_label = f"Cluster {cluster} (n={self.cluster_properties.loc[cluster, 'counts']})"
             show_legend = cluster_label not in cluster_in_legend
+
+            list_hover = []
+            list_hover.append(group["index"].dt.strftime("%d.%m.%Y"))
+
+            if hasattr(self, "series_cs") and self.series_cs is not None:
+                # Erstelle Dictionary für schnellen Lookup
+                lookup = {val: idx for idx, lst in self.series_cs.items() for val in lst}
+                group.loc[:, "rmq"] = group["index_series"].map(lookup)
+
+                for indicator in ["TV", "avg"]:
+                    series_indicator = self.indicators_data[indicator].loc[label, :].T.squeeze(axis=1)
+                    mapped_series = group["rmq"].map(series_indicator)
+                    mapped_series.name = indicator
+                    list_hover.append(mapped_series)
+
+            list_hover.append(pd.Series(round(group["value"].mean(), 0), index=group.index, name="Ø q Netzganglinie"))
+            df_hover = pd.concat(list_hover, axis=1)
+
+            df_hover.rename(columns={
+                "avg": "Ø q Ganglinie RMQ"
+            }, inplace=True)
+
             self._add_trace_to_fig(fig, group, cluster, show_legend, dict_color, row_subplot=row_subplot,
-                                   col_subplot=col_subplot, hovertext=group["index"].dt.strftime("%d.%m.%Y"))
+                                   col_subplot=col_subplot, add_hoverdata=df_hover)
 
             cluster_in_legend.add(cluster_label)
 
@@ -665,7 +842,7 @@ class Clusterung:
             show_legend = True
 
         # Define or use provided dictionary to determine line colors for each cluster
-        dict_color = get_cluster_colors(self.clusters.unique())
+        dict_color = self._get_cluster_colors()
 
         df_plot = self.representative_series.copy()
         df_plot["series"] = "Repräsentative Clusterganglinien"
@@ -673,14 +850,33 @@ class Clusterung:
         df_plot.sort_values(by=["cluster"], inplace=True)
         df_plot = pd.melt(df_plot.reset_index(names=["index"]), id_vars=["index", "cluster_num", "series"],
                           value_vars=df_plot.columns.to_list(),
-                          var_name="index series")
+                          var_name="index_series")
 
         series_width = self._determine_series_width(scale_width)
 
-        for cluster, group in df_plot.groupby(["index"], sort=False):
+        for label, group in df_plot.groupby(["index"], sort=False):
             cluster = group["cluster_num"].iloc[0]
+
+            list_hover = []
+            list_hover.append(pd.Series(f"Cluster {cluster}", index=group.index, name="Cluster"))
+
+            if hasattr(self, "series_cs") and self.series_cs is not None:
+                # Erstelle Dictionary für schnellen Lookup
+                lookup = {val: idx for idx, lst in self.series_cs.items() for val in lst}
+                group.loc[:, "rmq"] = group["index_series"].map(lookup)
+
+                for indicator in ["TV", "avg"]:
+                    series_indicator = self.indicators_clusters[indicator].loc[label, :].T.squeeze(axis=1)
+                    mapped_series = group["rmq"].map(series_indicator)
+                    mapped_series.name = indicator
+                    list_hover.append(mapped_series)
+
+            list_hover.append(pd.Series(round(group["value"].mean(), 0), index=group.index, name="Ø q Netzganglinie"))
+            df_hover = pd.concat(list_hover, axis=1)
+
+
             self._add_trace_to_fig(fig, group, cluster, show_legend, dict_color, row_subplot=row_subplot,
-                                   col_subplot=col_subplot, width=series_width[cluster], hovertext="Cluster " + group["cluster_num"].astype(str))
+                                   col_subplot=col_subplot, width=series_width[cluster], add_hoverdata=df_hover)
 
         if has_subplots(fig):
             fig.update_xaxes(title_text="Zählintervallindex Ganglinie [-]", row=row_subplot, col=col_subplot)
@@ -699,13 +895,15 @@ class Clusterung:
     # cluster assignment for a specific day in a given calendar week. The colors
     # indicate different clusters, and additional information is displayed via hover text.
     #
+    # @param flag_show_value Boolean flag to control whether to display the cluster values in the cells.
+    # @param flag_show_border Boolean flag to control whether to display cell borders.
     # @return A Plotly Figure object representing the calendar cluster plot.
-    def plot_calendar_cluster(self):
+    def plot_calendar_cluster(self, flag_show_value:bool=False, flag_show_border:bool=False):
         """Erstellt eine Kalender-Heatmap mit Clusterfarben."""
 
         ## @var dict_color
         #  A dictionary mapping cluster labels to colors.
-        dict_color = get_cluster_colors(self.clusters.unique())
+        dict_color = self._get_cluster_colors()
 
         # ## @var colorscale
         # #  A color scale for Plotly based on the cluster mappings.
@@ -753,7 +951,11 @@ class Clusterung:
             y=df_plot["calendar_week"],  # Y-axis: Calendar weeks
             text=df_plot["label"],  # Labels for hover text
             colorscale=colorscale,  # Cluster colors
-            showscale=False, texttemplate=None, textfont={"size": 12}))
+            showscale=False, 
+            texttemplate="%{z}" if flag_show_value else None,  # Show Z-values if flag is True
+            textfont={"size": 12},
+            xgap=2 if flag_show_border else 0,  # Add horizontal gap between cells if flag_show_border is True
+            ygap=2 if flag_show_border else 0))
 
         # Layout adjustments
         fig.update_layout(
@@ -787,6 +989,9 @@ class Clusterung:
     def plot_silhouette(self):
         """Erstellt ein Silhouettendiagramm basierend auf den berechneten Silhouettenwerten."""
 
+        if self.distance_matrix is None:
+            self._calculate_distance_matrix(return_vector=False)
+
         ## @var silhouette_values
         #  A Series containing the silhouette scores sorted in ascending order.
         if not hasattr(self, "series_silhouette"):
@@ -801,7 +1006,7 @@ class Clusterung:
 
         ## @var dict_color
         #  A dictionary mapping cluster labels to colors.
-        dict_color = get_cluster_colors(unique_clusters)
+        dict_color = self._get_cluster_colors()
 
         fig = go.Figure()
         dist_cluster_plot = 0
@@ -902,7 +1107,7 @@ class Clusterung:
 
         # Farben für die Cluster bestimmen
 
-        color_map = get_cluster_colors(self.clusters.unique())
+        color_map = self._get_cluster_colors()
 
         fig = go.Figure()
         added_clusters = set()  # Speichert bereits in die Legende aufgenommene Cluster
@@ -1006,6 +1211,85 @@ class Clusterung:
         return fig
 
 
+    def update_colors_diagram(self, fig=None, plottype: str="series", name: str="Cluster"):
+        """
+        Updates the colors in a diagram without recreating it.
+
+        Args:
+            fig: The figure to update. If None, returns None.
+            plottype: The type of plot to update ('series', 'calendar', 'silhouette', 'dendrogram', 'property', 'distances').
+            name: The name of the color map to use.
+
+        Returns:
+            The updated figure or None if fig is None.
+        """
+        if fig is None:
+            logging.warning("No figure provided to update_colors_diagrams")
+            return None
+
+        # Get updated colors from configuration
+        if plottype in ["series", "silhouette", "dendrogram"]:
+            # Get cluster colors
+            dict_color = self._get_cluster_colors()
+
+            # Update colors in traces
+            for trace in fig.data:
+                if "Cluster" in trace.name:
+                    cluster = int(trace.name.split(" ")[1])
+                    if cluster in dict_color:
+                        trace.line.color = dict_color[cluster]
+
+        elif plottype == "calendar":
+            # Get cluster colors
+            dict_color = self._get_cluster_colors()
+
+            # Create new colorscale
+            if -1 in dict_color.keys():
+                colorscale = [[(cluster + 1) / len(dict_color), color] for cluster, color in dict_color.items()]
+            else:
+                colorscale = [[(cluster - 1) / (len(dict_color) - 1), color] for cluster, color in dict_color.items()]
+
+            # Update colorscale in heatmap
+            for trace in fig.data:
+                if isinstance(trace, go.Heatmap):
+                    trace.colorscale = colorscale
+
+        elif plottype == "property":
+            # Get property colors
+            property_colors = self.config.get_colors(name=name, flag_property=True)
+
+            if isinstance(property_colors, list):
+                attribute_values = sorted([trace.name for trace in fig.data])
+
+                #  A dictionary mapping each cluster label to a unique color.
+                property_colors = {c: property_colors[i % len(property_colors)] for i, c in enumerate(attribute_values)}
+
+            # Update colors in traces
+            for trace in fig.data:
+                if trace.name in property_colors:
+                    trace.marker.color = property_colors[trace.name]
+
+        elif plottype == "distances":
+            # Get colorscale for distances
+            colorscale = self.config.get_colorscale(name=name)
+
+            # Update colorscale in heatmap
+            for trace in fig.data:
+                if isinstance(trace, go.Heatmap):
+                    trace.colorscale = colorscale
+
+        else:
+            logging.error(f"Unknown plottype {plottype}")
+
+
+        logging.info("Update Farben abgeschlossen")
+        return fig
+
+
+
+
+
+
     ## @brief Adds a line trace to a Plotly figure for a given cluster.
     #
     # @param fig The Plotly figure to modify.
@@ -1016,38 +1300,41 @@ class Clusterung:
     # @param row_subplot The subplot row index.
     # @param col_subplot The subplot column index.
     # @param width The width of the line.
-    def _add_trace_to_fig(self, fig, group, cluster, show_legend, dict_color, row_subplot=1, col_subplot=1, width=1, hovertext=None):
+    def _add_trace_to_fig(self, fig, group, cluster, show_legend, dict_color, row_subplot=1, col_subplot=1, width=1,
+                          add_hoverdata: pd.DataFrame=None):
+
+        hovertemplate = "<b>%{customdata[0]}</b><br>X-Wert: %{x}<br>Y-Wert: %{y:.2f}<br>"  # Hover-Text
+        # ggf weitere Daten adden
+        if add_hoverdata is not None:
+            str_data ="<br>".join([ f"{col}: %" + "{customdata[" + str(k+1) +"]:.0f}" for k, col in enumerate(add_hoverdata.columns[1:])])
+            hovertemplate += str_data
+        hovertemplate += "<extra></extra>"
+
         if has_subplots(fig):
             fig.add_trace(
                 go.Scatter(
-                    x=group["index series"],
+                    x=group["index_series"],
                     y=group["value"],
                     mode="lines",
                     name=f"Cluster {cluster}",
                     legendgroup=f"Cluster {cluster}",
                     showlegend=show_legend,
                     line=dict(color=dict_color[cluster], width=width),
-                    text=hovertext if hovertext is not None else [""] * len(group),
-                    hovertemplate="<b>%{text}</b><br>"  # Übergebener Hover-Text (z.B. Datum)
-                         "X-Wert: %{x}<br>"  # X-Wert (Index/Zählintervall)
-                         "Y-Wert: %{y:.2f}<br>"  # Y-Wert (Ganglinie)
-                         "<extra></extra>",  # Entfernt Standard-Tooltip
+                    customdata=add_hoverdata if add_hoverdata is not None else [""] * len(group),
+                    hovertemplate=hovertemplate,
                 ), row = row_subplot, col = col_subplot)
         else:
             fig.add_trace(
                 go.Scatter(
-                    x=group["index series"],
+                    x=group["index_series"],
                     y=group["value"],
                     mode="lines",
                     name=f"Cluster {cluster}",
                     legendgroup=f"Cluster {cluster}",
                     showlegend=show_legend,
                     line=dict(color=dict_color[cluster], width=width),
-                    text=hovertext if hovertext is not None else [""] * len(group),
-                    hovertemplate="<b>%{text}</b><br>"  # Übergebener Hover-Text (z.B. Datum)
-                                  "X-Wert: %{x}<br>"  # X-Wert (Index/Zählintervall)
-                                  "Y-Wert: %{y:.2f}<br>"  # Y-Wert (Ganglinie)
-                                  "<extra></extra>",  # Entfernt Standard-Tooltip
+                    customdata=add_hoverdata if add_hoverdata is not None else [""] * len(group),
+                    hovertemplate=hovertemplate,
                 ))
 
 
@@ -1162,6 +1449,10 @@ class Clusterung:
     # The silhouette score measures how similar a point is to its assigned cluster
     # compared to other clusters. A higher score indicates better clustering quality.
     def _calculate_silhouette(self):
+
+        if self.distance_matrix is None:
+            self._calculate_distance_matrix(return_vector=False)
+
         series_silhouette = pd.Series(np.inf, index=self.clusters.index)
 
         # Adjust distance matrix for specific distance functions
@@ -1182,12 +1473,44 @@ class Clusterung:
                         else:
                             separation = min(separation,
                                              self.distance_matrix.loc[ind, indizes_others].mean())
-
-                    series_silhouette.loc[ind] = (separation - cohesion) / max(separation, cohesion)
+                    if np.isinf(separation) or (separation == 0 and cohesion == 0):
+                        silhouette = 0
+                    else:
+                        silhouette = (separation - cohesion) / max(cohesion, separation)
+                    if np.isnan(silhouette):
+                        a=1
+                    series_silhouette.loc[ind] = silhouette
                     del cohesion, separation
 
         self.series_silhouette = series_silhouette
 
+    # Helper function to calculate indicators for a given data source
+    def _calculate_indicators_for_data(self, data_source, dict_indicators_calc):
+        indicators_dict = {}
+        for indicator in dict_indicators_calc.keys():
+            # Create DataFrame for this indicator
+            indicators_dict[indicator] = pd.DataFrame(index=data_source.index, columns=self.series_cs.keys())
+
+            # Get the indicator function
+            indicator_func = dict_indicators_calc[indicator]
+
+            # Apply the indicator function to each set of columns
+            results = {key: indicator_func(data_source, value) for key, value in self.series_cs.items()}
+
+            # Handle different return types
+            first_key = next(iter(results))
+            first_value = results[first_key]
+
+
+
+            if isinstance(first_value, pd.DataFrame):
+                results_df = pd.concat(results, axis=1)
+            else:
+                results_df = pd.DataFrame(results, index=data_source.index)
+
+            indicators_dict[indicator] = results_df
+
+        return indicators_dict
 
     ## @brief Retrieves the maximum internal distances within each cluster.
     #
@@ -1236,6 +1559,65 @@ class Clusterung:
         dict_info["max. interne Distanz"] = f"{max_value:.2f} (Cluster {max_index:.0f})"
 
         return pd.Series(dict_info)
+
+    ## @brief Generates a consistent color mapping for clusters using a Plotly color scale.
+    #
+    # This function assigns a unique color to each cluster using the `Dark24` color palette
+    # (or an alternative, such as Set1, Pastel1, Viridis).
+    #
+    # @param clusters A list or set of unique cluster labels.
+    # @return A dictionary mapping each cluster label to a color.
+    def _get_cluster_colors(self):
+        """Erstellt eine konsistente Farbzuteilung für Cluster basierend auf einer Plotly-Farbskala."""
+
+        clusters = self.clusters.unique()
+
+        ## @var colors
+        colors = self.config.get_colors(name="cluster")
+
+        if isinstance(colors, list) or len(colors) < len(clusters):
+            ## @var unique_clusters
+            #  A sorted list of unique cluster labels.
+            unique_clusters = sorted(set(clusters))
+
+            if isinstance(colors, dict):
+                colors = list(colors.values())
+
+            ## @var color_dict
+            #  A dictionary mapping each cluster label to a unique color.
+            color_dict = {c: colors[i % len(colors)] for i, c in enumerate(unique_clusters)}
+
+            self.config.colors["sequences"]["cluster"] = {
+                "type": "sequence",
+                "colors": color_dict,
+            }
+        else:
+            color_dict = colors
+
+
+        return color_dict
+
+
+    def calculate_series_cs(self):
+        # identify number of count stations
+        n = self.data.shape[1] / self.n_count_intervals
+
+        if (n % n) > 0:
+            logging.warning(f"Number of count stations ({n}) is not an integer. "
+                            f"The number of count stations will be rounded down to the nearest integer.")
+        else:
+            n = int(n)
+
+        # Create a temporary dictionary to store the key-value pairs
+        temp_dict = {}
+
+        # Assign indices
+        for k in range(n):
+            temp_dict[f"RMQ_{k + 1}"] = self.data.columns[k * self.n_count_intervals
+                                                          :(k + 1) * self.n_count_intervals]
+
+        # Convert the dictionary to a pandas Series for better lookup functionality
+        self.series_cs = pd.Series(temp_dict)
 
 
 ## @brief Checks if the figure has subplots.
@@ -1305,28 +1687,3 @@ def format_diagrams(fig, language, n_dec_x=0, n_dec_y=0, font_size=16):
         )
 
     return fig
-
-
-## @brief Generates a consistent color mapping for clusters using a Plotly color scale.
-#
-# This function assigns a unique color to each cluster using the `Dark24` color palette
-# (or an alternative, such as Set1, Pastel1, Viridis).
-#
-# @param clusters A list or set of unique cluster labels.
-# @return A dictionary mapping each cluster label to a color.
-def get_cluster_colors(clusters):
-    """Erstellt eine konsistente Farbzuteilung für Cluster basierend auf einer Plotly-Farbskala."""
-
-    ## @var colors
-    #  A predefined color palette from Plotly.
-    colors = px.colors.qualitative.Dark24  # Oder Set1, Pastel1, Viridis...
-
-    ## @var unique_clusters
-    #  A sorted list of unique cluster labels.
-    unique_clusters = sorted(set(clusters))
-
-    ## @var color_dict
-    #  A dictionary mapping each cluster label to a unique color.
-    color_dict = {c: colors[i % len(colors)] for i, c in enumerate(unique_clusters)}
-
-    return color_dict

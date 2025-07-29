@@ -1,0 +1,73 @@
+{
+    "_meta": {
+        "description": "Farbdefinitionen, unterteilt in Farbsequenzen und Farbskalen. \n                Sequenzen k\u00f6nnen als Listen oder LookUp Dicts \u00fcbergeben werden.  \n                Spezielle Colormaps entsprechen einsortieren mit key = Bezugsattribut.\n                Beim Update der Farben erfolgt die Zuordnung Listenreihenfolge zu alphabetisch sortierten Attributswerten",
+        "version": "1.0"
+    },
+    "sequences": {
+        "default": {
+            "type": "sequence",
+            "name": "Dark24",
+            "colors": [
+                "#2E91E5",
+                "#E15F99",
+                "#1CA71C",
+                "#FB0D0D",
+                "#DA16FF",
+                "#222A2A",
+                "#B68100",
+                "#750D86",
+                "#EB663B",
+                "#511CFB",
+                "#00A08B",
+                "#FB00D1",
+                "#FC0080",
+                "#B2828D",
+                "#6C7C32",
+                "#778AAE",
+                "#862A16",
+                "#A777F1",
+                "#620042",
+                "#1616A7",
+                "#DA60CA",
+                "#6C4516",
+                "#0D2A63",
+                "#AF0038"
+            ]
+        },
+        "properties": {
+            "type": "sequence",
+            "name": "G10",
+            "colors": [
+                "#3366CC",
+                "#DC3912",
+                "#FF9900",
+                "#109618",
+                "#990099",
+                "#0099C6",
+                "#DD4477",
+                "#66AA00",
+                "#B82E2E",
+                "#316395"
+            ]
+        },
+        "wochentag": {
+            "type": "sequence",
+            "name": "Wochentag",
+            "colors": {
+                "Montag": "#008000",
+                "Dienstag": "#000080",
+                "Mittwoch": "#00FFFF",
+                "Donnerstag": "#0000FF",
+                "Freitag": "#FF7F00",
+                "Samstag": "#FF0000",
+                "Sonntag": "#800000"
+            }
+        }
+    },
+    "gradients": {
+        "default": {
+            "type": "gradient",
+            "name": "spectral"
+        }
+    }
+}
