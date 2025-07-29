@@ -1,0 +1,26 @@
+{
+    "gui": {
+        "default_language": "de",
+        "window_size": [
+            1229,
+            922
+        ],
+        "default_property": "Wochentag",
+        "num_decimal_places": 0
+    },
+    "clustering": {
+        "default_method": "average",
+        "default_distance_function": "SQV Counts",
+        "default_cutoff": 0.8,
+        "default_kmeans_preset": "random",
+        "default_kmeans_iterations": 10,
+        "scaling_factor_sqv": 1000
+    },
+    "calendar": {
+        "default_state": "BW"
+    },
+    "paths": {
+        "data_dir": "data/",
+        "temp_dir": "temp/"
+    }
+}

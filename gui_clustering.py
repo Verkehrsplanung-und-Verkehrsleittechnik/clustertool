@@ -16,6 +16,8 @@
 #  @date 2025
 #  @note The module requires `wxPython` and `plotly` for GUI and visualization.
 
+
+import numpy as np
 import wx
 from wx.html2 import WebView
 import wx.adv
@@ -29,6 +31,10 @@ import markdown
 
 import pandas as pd
 import modules
+import gui_bemessung
+
+# Instanz ConfigManager
+from modules.data_handler import config_manager
 
 
 ## @class ClusterGUI
@@ -41,6 +47,10 @@ class ClusterGUI(wx.Frame):
     #  @param parent Parent window (default: None).
     def __init__(self, style=wx.DEFAULT_FRAME_STYLE):
         super().__init__(None)
+
+        ## @var config_manager
+        #  Reference to the configuration manager.
+        self.config_manager = config_manager
 
         ## @var temp_files
         # tracks temporary file names for deletion
@@ -68,7 +78,7 @@ class ClusterGUI(wx.Frame):
 
         ## @var default_property
         #  Default property used for cluster visualization (e.g., "Wochentag").
-        self.default_property = "Wochentag"
+        self.default_property = self.config_manager.config['gui']['default_property']
 
         ## @var button_handlers
         #  Dictionary that maps button labels to their respective event handlers.
@@ -116,7 +126,8 @@ class ClusterGUI(wx.Frame):
         self.SetMinSize((1200, 600))
 
         # Set the initial window size when the application starts
-        self.SetSize((1450, 1000))  # Startgröße setzen
+        window_size = config_manager.config['gui']['window_size']
+        self.SetSize(window_size)
 
         # # Set the minimal button size
         # for btn in self.buttons:
@@ -132,10 +143,12 @@ class ClusterGUI(wx.Frame):
     #  - Result visualization areas
     #  - Action buttons for clustering and export functions
     def __set_layout(self):
+        ## Create menubar
+        self._create_menubar()
 
         ## Define padding for spacing between elements
         padding = 2
-        
+
         default_flags = wx.ALL | wx.EXPAND #| wx.SHRINK
 
         ## @var panel
@@ -239,8 +252,8 @@ class ClusterGUI(wx.Frame):
         cluster_sizer_r2c2.Add(self.use_max_distance, 1, default_flags, padding)
         cluster_sizer_r2c2.Add(self.max_distance, 0, default_flags, padding)
 
-        cluster_sizer_col1.Add(cluster_sizer_r2c1, 1, default_flags, padding)
-        cluster_sizer_col2.Add(cluster_sizer_r2c2, 1, default_flags, padding)
+        cluster_sizer_col1.Add(cluster_sizer_r2c2, 1, default_flags, padding)
+        cluster_sizer_col2.Add(cluster_sizer_r2c1, 1, default_flags, padding)
 
         cluster_sizer_r3c1 = wx.BoxSizer(wx.HORIZONTAL)
         cluster_sizer_r3c1.Add(wx.StaticText(self.controls_panel, label="Kmeans Wiederholungen"), 1,
@@ -342,7 +355,7 @@ class ClusterGUI(wx.Frame):
         self.text_properties = wx.StaticText(self.controls_panel)
 
         data_sizer_r1 = wx.BoxSizer(wx.HORIZONTAL)
-        data_sizer_r1.Add(wx.StaticText(self.controls_panel, label="Daten für die Clusterung"), 1, 
+        data_sizer_r1.Add(wx.StaticText(self.controls_panel, label="Daten für die Clusterung"), 1,
                           default_flags,
                           padding)
         data_sizer_r1.Add(data_button,  1, default_flags, padding)
@@ -481,6 +494,10 @@ class ClusterGUI(wx.Frame):
         main_sizer.Add(self.plot_panel, 3, default_flags, padding)
         self.panel.SetSizer(main_sizer)
 
+        self.panel.Layout()
+        self.Layout()  # Ensures the frame layout is updated
+        # self.Maximize()
+
     ## @brief Binds event handlers to UI components.
     #
     #  This method connects various GUI elements (buttons, dropdowns, web views) to their respective event handlers.
@@ -522,20 +539,25 @@ class ClusterGUI(wx.Frame):
         # Enable the checkbox for calendar-based clustering.
         self.use_calendar_properties.SetValue(True)
 
-        # Set the default selection for the clustering distance function.
-        self.cluster_distance_choice.SetStringSelection("GEH")
+        # Set the default selection for the clustering distance function from config.
+        default_distance = self.config_manager.config['clustering']['default_distance_function']
+        self.cluster_distance_choice.SetStringSelection(default_distance)
 
-        # Set the default clustering method to "Average Linkage".
-        self.cluster_method_choice.SetStringSelection("Average Linkage")
+        # Set the default clustering method from config.
+        default_method = self.config_manager.config['clustering']['default_method']
+        # Convert to display format (e.g., "average" -> "Average Linkage")
+        method_display = default_method.capitalize() + " Linkage"
+        self.cluster_method_choice.SetStringSelection(method_display)
 
         # Enable the cutoff distance setting.
         self.use_max_distance.SetValue(True)
 
-        # Set the default cutoff distance to 5.
-        self.max_distance.SetValue(5)
+        # Set the default cutoff distance from config.
+        default_cutoff = self.config_manager.config['clustering']['default_cutoff']
+        self.max_distance.SetValue(default_cutoff)
 
         # Set the default federal state for holiday-based clustering to Baden-Württemberg ("BW").
-        self.choice_state.SetStringSelection("BW")
+        self.choice_state.SetStringSelection(self.config_manager.config['calendar']['default_state'])
 
         # Display default messages indicating that no data has been loaded.
         self.text_data.SetLabel("keine Ganglinien geladen")
@@ -544,8 +566,22 @@ class ClusterGUI(wx.Frame):
         ## Set the default number of k-means iterations to 10.
         self.kmeans_repeats.SetValue(10)
 
-        ## Set the default k-means initialization method to "++ Algorithmus".
-        self.kmeans_preselect.SetStringSelection("++ Algorithmus")
+        ## Set the default k-means initialization method from config.
+        default_kmeans_preset = self.config_manager.config['clustering']['default_kmeans_preset']
+        # Convert to display format (e.g., "random" -> "Zufällig", "k-means++" -> "++ Algorithmus")
+        # Hinweis: Übersetzung passt nicht 1:1, ist in kmeans2 methode von scipy sehr unglücklich als Bezeichenr gewählt
+        kmeans_preset_map = {
+            "random": "Zufällige Auswahl",
+            "k-means++": "++ Algorithmus",
+            "uniform": "Normalverteilung"
+        }
+        preset_display = kmeans_preset_map.get(default_kmeans_preset, "++ Algorithmus")
+        self.kmeans_preselect.SetStringSelection(preset_display)
+
+
+    def bind_with_args(self, type, instance, handler, *args, **kwargs):
+        self.Bind(type, lambda event: handler(event, *args, **kwargs), instance)
+
 
     ## @brief Opens a data file and loads time-series data or a clustering result.
     #
@@ -591,7 +627,7 @@ class ClusterGUI(wx.Frame):
                 logging.info("Clusterung wird geöffnet")
 
                 # Load the clustering object from JSON.
-                clusterer = modules.data_handler.load_clusterung_from_json(data_file)
+                clusterer = modules.data_handler.load_clusterung_from_json(data_file, config_manager=self.config_manager)
 
                 # Store imported data and properties.
                 self.cluster_data = clusterer.data
@@ -658,6 +694,17 @@ class ClusterGUI(wx.Frame):
         docu = HelpPopUp(self, documentation_dir)
         docu.Show()
 
+    def on_info_import(self, event):
+        # Define the message content.
+        message = (
+            "- CSV: Ganglinien, erste Zeile Index, mit oder ohne Spaltennamen\n"
+            "- Excel: bei mehreren Tabellenblättern wird das mit dem Namen 'Data Ganglinien' oder, falls nicht vorhanden, das erste Tabellenblatt eingelesen\n"
+            "- JSON: Exportobjekt einer vorherigen Clusterung"
+        )
+
+        # Display the message box.
+        wx.MessageBox(message, "Informationen Dateiformate Import", wx.OK | wx.ICON_INFORMATION)
+
     ## @brief Executes the clustering process based on user settings.
     #
     #  This method retrieves user-selected clustering parameters, validates them,
@@ -694,18 +741,21 @@ class ClusterGUI(wx.Frame):
                           wx.OK | wx.ICON_INFORMATION)
             return
 
+        distance_fcn = self.cluster_distance_choice.GetString(
+                    self.cluster_distance_choice.GetCurrentSelection()
+                )
+
         # Ensure that k-means clustering has a valid cluster count.
-        if method == "kmeans" and max_clusters is None:
+        if ((method == "kmeans" and max_clusters is None)
+                or (method == "kmeans" and distance_fcn != "Euclidean")):
             logging.error("Parameterkombination ist ungültig: Bei kmeans muss die Anzahl an Clustern definiert werden")
             wx.MessageBox('Clusterung nicht möglich - Parameterkombination ungültig',
                           'Clusterung ausführen',
                           wx.OK | wx.ICON_INFORMATION)
             return
 
-        distance_fcn = self.cluster_distance_choice.GetString(
-                    self.cluster_distance_choice.GetCurrentSelection()
-                )
-        if distance_fcn == "SQV Counts" and max_distance > 1:
+
+        if method != "kmeans" and distance_fcn == "SQV Counts" and max_distance > 1:
             logging.error("Parameterkombination ist ungültig: Wertebereich SQV zwischen 0 und 1")
             wx.MessageBox('Clusterung nicht möglich - Wertebereich CutOff ungültig',
                           'Clusterung ausführen',
@@ -747,12 +797,14 @@ class ClusterGUI(wx.Frame):
                     self.kmeans_preselect.GetCurrentSelection()
                 ) if method == "kmeans" else None,
                 calendar_obj=self.calendar_obj,
-                use_calendar=self.use_calendar_properties.IsChecked()
+                use_calendar=self.use_calendar_properties.IsChecked(),
+                config_manager=self.config_manager
             )
             logging.info("Clusterobjekt erfolgreich angelegt")
 
             # Execute the clustering process.
             clusteranalysis.perform_clustering()
+            clusteranalysis.calculate_indicators_cs()
 
         except Exception as e:
             logging.error("%s", e)
@@ -772,7 +824,7 @@ class ClusterGUI(wx.Frame):
         try:
             # Retrieve the active cluster object.
             clusterobj = self.cluster_analyses[self.active_cluster]["Clusterobjekt"]
-        except KeyError:
+        except:
             logging.error("Kein gültiges Clusterobjekt ausgewählt")
             return
 
@@ -786,7 +838,8 @@ class ClusterGUI(wx.Frame):
             fig = clusterobj.plot_dendrogramm()
 
             # Create a popup window to display the dendrogram.
-            popup = PlotPopup(self, fig=fig, title=f"Dendrogramm Ganglinien {clusterobj.method}")
+            popup = PlotPopup(self, fig=fig, title=f"Dendrogramm Ganglinien",
+                              cluster_id=self.active_cluster)
             popup.Show()
         except Exception as e:
             logging.error("%s", e)
@@ -838,7 +891,7 @@ class ClusterGUI(wx.Frame):
         try:
             # Retrieve the active cluster object.
             clusterobj = self.cluster_analyses[self.active_cluster]["Clusterobjekt"]
-        except KeyError:
+        except:
             logging.error("Kein gültiges Clusterobjekt ausgewählt")
             return
 
@@ -847,7 +900,7 @@ class ClusterGUI(wx.Frame):
             fig = clusterobj.plot_distances()
 
             # Create a popup window to display the distance matrix.
-            popup = PlotPopup(self, fig=fig, title="Distanzen Ganglinien")
+            popup = PlotPopup(self, fig=fig, title="Distanzen Ganglinien", cluster_id=self.active_cluster)
             popup.Show()
         except Exception as e:
             logging.error("%s", e)
@@ -863,7 +916,7 @@ class ClusterGUI(wx.Frame):
         try:
             # Retrieve the active cluster object.
             clusterobj = self.cluster_analyses[self.active_cluster]["Clusterobjekt"]
-        except KeyError:
+        except:
             logging.error("Kein gültiges Clusterobjekt ausgewählt")
             return
 
@@ -872,7 +925,7 @@ class ClusterGUI(wx.Frame):
             fig = clusterobj.plot_silhouette()
 
             # Create a popup window to display the silhouette diagram.
-            popup = PlotPopup(self, fig=fig, title="Silhouettendiagramm Ganglinien")
+            popup = PlotPopup(self, fig=fig, title="Silhouettendiagramm Ganglinien", cluster_id=self.active_cluster)
             popup.Show()
         except Exception as e:
             logging.error("%s", e)
@@ -888,7 +941,7 @@ class ClusterGUI(wx.Frame):
         try:
             # Retrieve the active cluster object.
             clusterobj = self.cluster_analyses[self.active_cluster]["Clusterobjekt"]
-        except KeyError:
+        except:
             logging.error("Kein gültiges Clusterobjekt ausgewählt")
             return
 
@@ -897,7 +950,14 @@ class ClusterGUI(wx.Frame):
             fig = clusterobj.plot_calendar_cluster()
 
             # Create a popup window to display the calendar visualization.
-            popup = PlotPopup(self, fig=fig, title="Kalender Cluster")
+            popup = ButtonPlotPopup(self, fig=fig, title="Kalender Cluster", 
+                                   checkboxes={ # attribute name : display text for checkbox
+                                       "flag_show_value": "Anzeigen der Werte",
+                                       "flag_show_border": "Anzeigen der Zellenbegrenzungen"
+                                   },
+                                    clustering=clusterobj,
+                                    str_plot_function="plot_calendar_cluster",
+                                    cluster_id=self.active_cluster)
             popup.Show()
         except Exception as e:
             logging.error("%s", e)
@@ -917,7 +977,7 @@ class ClusterGUI(wx.Frame):
         try:
             # Retrieve the active cluster object.
             clusterobj = self.cluster_analyses[self.active_cluster]["Clusterobjekt"]
-        except KeyError:
+        except:
             logging.error("Kein gültiges Clusterobjekt ausgewählt")
             return
 
@@ -1039,6 +1099,164 @@ class ClusterGUI(wx.Frame):
             logging.error("%s", e)
             return
 
+    ## @brief Exports or sets default color configurations.
+    #
+    #  This method either creates default colors or writes the current color configuration
+    #  to the configuration file, depending on the 'how' parameter.
+    #
+    #  @param event The wxPython event object.
+    #  @param how A string parameter that determines the action to take. If "set_default",
+    #         creates default colors; otherwise, writes current colors to configuration.
+    def on_export_colors(self, event, how: str=""):
+
+        if how == "set_default":
+            self.config_manager._create_default_colors()
+        else:
+            self.config_manager.write_colors()
+
+
+    ## @brief Displays indicators for the active cluster in a popup window.
+    #
+    #  This method retrieves the active cluster object and creates a popup window
+    #  that displays indicator tables for the time series data. The indicators provide
+    #  statistical information about the clusters.
+    #
+    #  @param event The wxPython event object.
+    def on_show_indicator(self, event):
+        try:
+            # Retrieve the active cluster object.
+            clusterobj = self.cluster_analyses[self.active_cluster]["Clusterobjekt"]
+        except:
+            logging.error("Kein gültiges Clusterobjekt ausgewählt")
+            return
+
+        # Create and show the popup window with indicator tables
+        num_decimal_places = self.config_manager.config['gui'].get('num_decimal_places', 0)
+        popup = PopUpIndicatorWindow(self, clusterobj, title="Kenngrößen Ganglinien",
+                                     cluster_id=self.active_cluster,
+                                     num_decimal_places=num_decimal_places)
+        popup.Show()
+
+
+
+
+
+    ## @brief Updates the color maps for all diagrams without recreating them.
+    #
+    #  This method is called when the user selects the "Import & Update Farben Diagramme" 
+    #  menu item. It loads the colors from the configuration and updates all diagrams
+    #  with the new colors.
+    #
+    #  @param event The wxPython event object.
+    def on_update_colormaps(self, event):
+        # Load colors from configuration
+        self.config_manager._load_colors()
+
+        try:
+            # Retrieve the active cluster object.
+            clusterobj = self.cluster_analyses[self.active_cluster]["Clusterobjekt"]
+        except:
+            logging.error("Kein gültiges Clusterobjekt ausgewählt")
+            return
+
+        try:
+            # Update the time series plot
+            fig_series = self.cluster_analyses[self.active_cluster]["Plot Ganglinien"]
+            fig_series = clusterobj.update_colors_diagram(fig=fig_series, plottype="series")
+            self.cluster_analyses[self.active_cluster]["Plot Ganglinien"] = fig_series
+
+            # Update the property plots
+            for prop, fig in self.cluster_analyses[self.active_cluster]["Plots Eigenschaften"].items():
+                updated_fig = clusterobj.update_colors_diagram(fig=fig, plottype="property", name=prop)
+                self.cluster_analyses[self.active_cluster]["Plots Eigenschaften"][prop] = updated_fig
+
+            # Nachfolgender Code wird aktuell nicht verwendet, da die Diagramme nicht gespeichert werden
+            # # Update the silhouette plot if it exists
+            # if "Plot Silhouette" in self.cluster_analyses[self.active_cluster]:
+            #     fig_silhouette = self.cluster_analyses[self.active_cluster]["Plot Silhouette"]
+            #     fig_silhouette = clusterobj.update_colors_diagram(fig=fig_silhouette, plottype="silhouette")
+            #     self.cluster_analyses[self.active_cluster]["Plot Silhouette"] = fig_silhouette
+            #
+            # # Update the dendrogram if it exists
+            # if "Plot Dendrogramm" in self.cluster_analyses[self.active_cluster]:
+            #     fig_dendrogram = self.cluster_analyses[self.active_cluster]["Plot Dendrogramm"]
+            #     fig_dendrogram = clusterobj.update_colors_diagram(fig=fig_dendrogram, plottype="dendrogram")
+            #     self.cluster_analyses[self.active_cluster]["Plot Dendrogramm"] = fig_dendrogram
+            #
+            # # Update the distance matrix if it exists
+            # if "Plot Distanzmatrix" in self.cluster_analyses[self.active_cluster]:
+            #     fig_distances = self.cluster_analyses[self.active_cluster]["Plot Distanzmatrix"]
+            #     fig_distances = clusterobj.update_colors_diagram(fig=fig_distances, plottype="distances")
+            #     self.cluster_analyses[self.active_cluster]["Plot Distanzmatrix"] = fig_distances
+            #
+            # # Update the calendar if it exists
+            # if "Plot Kalender" in self.cluster_analyses[self.active_cluster]:
+            #     fig_calendar = self.cluster_analyses[self.active_cluster]["Plot Kalender"]
+            #     fig_calendar = clusterobj.update_colors_diagram(fig=fig_calendar, plottype="calendar")
+            #     self.cluster_analyses[self.active_cluster]["Plot Kalender"] = fig_calendar
+
+            # Update the displayed plots
+            self._update_plot_right(self.active_cluster)
+            property = self.choice_property_plot.GetStringSelection()
+            self._update_plot_left(int(self.active_cluster), property)
+
+            logging.info("Farbzuweisungen wurden erfolgreich aktualisiert.")
+
+        except Exception as e:
+            logging.error("%s", e)
+            return
+
+
+    ## @brief Updates the indicators for the active cluster.
+    #
+    #  This method clears and recalculates the indicators for the active cluster.
+    #  Indicators provide statistical information about the time series data in each cluster.
+    #
+    #  @param event The wxPython event object.
+    def on_update_indicator(self, event):
+        try:
+            clusterobj = self.cluster_analyses[self.active_cluster]["Clusterobjekt"]
+        except:
+            logging.error("Kein gültiges Clusterobjekt ausgewählt")
+            return
+
+        try:
+            clusterobj.indicators_data = {}
+            clusterobj.indicators_clusters = {}
+            clusterobj.calculate_indicators_cs()
+        except Exception as e:
+            logging.error("%s", e)
+            return
+
+    ## @brief Updates the global indicators for the active cluster.
+    #
+    #  This method initializes and calculates global indicators for the active cluster.
+    #  Global indicators provide statistical information about the entire dataset
+    #  rather than individual clusters.
+    #
+    #  @param event The wxPython event object.
+    def on_update_global_indicators(self, event):
+        try:
+            clusterobj = self.cluster_analyses[self.active_cluster]["Clusterobjekt"]
+        except:
+            logging.error("Kein gültiges Clusterobjekt ausgewählt")
+            return
+
+        try:
+            # Initialize global indicators dictionaries if they don't exist
+            if not hasattr(clusterobj, 'indicators_global_data'):
+                clusterobj.indicators_global_data = {}
+            if not hasattr(clusterobj, 'indicators_global_cluster'):
+                clusterobj.indicators_global_cluster = {}
+
+            clusterobj.calculate_indicators_global()
+
+            logging.info("Globale Kenngrößen wurden erfolgreich aktualisiert.")
+        except Exception as e:
+            logging.error("%s", e)
+            return
+
+
     ## @brief Updates the left-side plot when a new cluster property is selected.
     #
     #  This method is triggered when the user selects a new property in the `wx.Choice` widget.
@@ -1090,7 +1308,7 @@ class ClusterGUI(wx.Frame):
             # Retrieve the active cluster object.
             clusterobj = self.cluster_analyses[self.active_cluster]["Clusterobjekt"]
             fig = self.cluster_analyses[self.active_cluster]["Plot Ganglinien"]
-        except KeyError:
+        except:
             logging.error("Kein gültiges Clusterobjekt ausgewählt")
             return
 
@@ -1105,6 +1323,34 @@ class ClusterGUI(wx.Frame):
         else:
             fig.layout.shapes = () # delete vertical lines and other shapes
             return
+
+
+    ## @brief Opens a window for designing hourly volumes based on the active cluster.
+    #
+    #  This method creates a popup window that allows the user to design hourly volumes
+    #  using the data from the active cluster. The window is implemented in the gui_bemessung
+    #  module as DesignHourlyVolumeWindow.
+    #
+    #  @param event The wxPython event object.
+    def on_design_hourly_volumes(self, event):
+        try:
+            # Retrieve the active cluster object.
+            clusterobj = self.cluster_analyses[self.active_cluster]["Clusterobjekt"]
+        except:
+            logging.error("Kein gültiges Clusterobjekt ausgewählt")
+            return
+
+        try:
+            # Create a popup window
+            popup = gui_bemessung.DesignHourlyVolumeWindow(None, clusterobj=clusterobj,
+                                                           cluster_id=self.active_cluster )
+            popup.Show()
+        except Exception as e:
+            logging.error("%s", e)
+            return
+
+
+
 
 
 
@@ -1284,6 +1530,102 @@ class ClusterGUI(wx.Frame):
 
         self.Destroy()
 
+    ## @brief Creates the menubar with all menus and menu items.
+    #
+    #  This method creates a menubar with the following menus:
+    #  - Datenimport: For importing data
+    #  - Export: For exporting data and diagrams
+    #  - Diagramme: For displaying different diagrams
+    #  - Kenngrößen Ganglinien: For calculating and displaying indicators
+    #  - Bemessung: For dimensioning
+    def _create_menubar(self):
+        # Create standard menubar
+        menubar = wx.MenuBar()
+
+        # Create menus
+        menu_data_import = wx.Menu()
+        menu_export = wx.Menu()
+        menu_diagrams = wx.Menu()
+        menu_indicators = wx.Menu()
+        menu_dimensioning = wx.Menu()
+
+        # Add items to Datenimport menu
+        item_info_data = menu_data_import.Append(wx.ID_ANY, "Info Dateiformate",
+                                                 "Informationen zu dem Umgang mit Dateiformaten beim Import")
+        menu_data_import.AppendSeparator()
+        item_open_data = menu_data_import.Append(wx.ID_OPEN, "Ganglinien öffnen", "Öffnet eine Datei mit Ganglinien")
+        item_open_properties = menu_data_import.Append(wx.ID_ANY, "Eigenschaften öffnen",
+                                                       "Öffnet eine Datei mit Eigenschaften")
+        menu_data_import.AppendSeparator()
+        item_reset_data = menu_data_import.Append(wx.ID_ANY, "Daten Ganglinien löschen",)
+        item_reset_properties = menu_data_import.Append(wx.ID_ANY, "Daten Eigenschaften löschen",)
+        self.Bind(wx.EVT_MENU, self.on_info_import, item_info_data)
+        self.Bind(wx.EVT_MENU, self.on_open_data, item_open_data)
+        self.Bind(wx.EVT_MENU, self.on_open_properties, item_open_properties)
+        self.bind_with_args(wx.EVT_MENU, item_reset_data,self.on_reset_attr_data,"cluster_data")
+        self.bind_with_args(wx.EVT_MENU, item_reset_properties,self.on_reset_attr_data,"properties_data")
+
+        # Add items to Export menu
+        item_export_data = menu_export.Append(wx.ID_SAVE, "Aktive Clusterung exportieren", "Exportiert die aktuelle Clusterung")
+        item_export_all_data = menu_export.Append(wx.ID_ANY, "Alle Clusterungen exportieren", "Exportiert alle Clusterungen")
+        item_export_diagrams = menu_export.Append(wx.ID_ANY, "Diagramme der aktiven Clusterung exportieren", "Exportiert die Diagramme")
+        self.Bind(wx.EVT_MENU, self.on_export_data, item_export_data)
+        self.Bind(wx.EVT_MENU, self.on_export_all_data, item_export_all_data)
+        self.Bind(wx.EVT_MENU, self.on_export_diagrams, item_export_diagrams)
+
+        # Add items to Diagramme menu
+        item_export_colors = menu_diagrams.Append(wx.ID_ANY, "Export Farbzuweisungen als colors.json")
+        item_update_colors = menu_diagrams.Append(wx.ID_ANY, "Import & Update Farben Diagramme (aktive Clusterung)")
+        item_reset_colors = menu_diagrams.Append(wx.ID_ANY, "Default Farbzuweisungen als colors.json")
+        menu_diagrams.AppendSeparator()
+        item_distance_matrix = menu_diagrams.Append(wx.ID_ANY, "Distanzmatrix", "Zeigt die Distanzmatrix der Ganglinien")
+        item_silhouette = menu_diagrams.Append(wx.ID_ANY, "Silhouettendiagramm", "Zeigt das Silhouettendiagramm")
+        item_dendrogram = menu_diagrams.Append(wx.ID_ANY, "Dendrogramm", "Zeigt das Dendrogramm")
+        item_calendar = menu_diagrams.Append(wx.ID_ANY, "Clusterkalender", "Zeigt den Clusterkalender")
+
+        self.Bind(wx.EVT_MENU, self.on_distancematrix, item_distance_matrix)
+        self.Bind(wx.EVT_MENU, self.on_plot_silhouette, item_silhouette)
+        self.Bind(wx.EVT_MENU, self.on_plot_dendrogramm, item_dendrogram)
+        self.Bind(wx.EVT_MENU, self.on_cluster_calendar, item_calendar)
+        self.Bind(wx.EVT_MENU, self.on_export_colors, item_export_colors)
+        # self.Bind(wx.EVT_MENU, self.config_manager._load_colors, item_import_colors)
+        self.Bind(wx.EVT_MENU, self.on_update_colormaps, item_update_colors)
+        self.bind_with_args(wx.EVT_MENU, item_reset_colors, self.on_export_colors,"set_default")
+
+        # Add items to Kenngrößen Ganglinien menu
+        # Placeholder for future implementation
+        item_indicators = menu_indicators.Append(wx.ID_ANY, "Kenngrößen aktualisieren (aktive Clusterung)", "Berechnet Kenngrößen für Ganglinien")
+        item_global_indicators = menu_indicators.Append(wx.ID_ANY, "Globale Kenngrößen aktualisieren (aktive Clusterung)", "Berechnet globale Kenngrößen für Ganglinien")
+        item_indicator_table = menu_indicators.Append(wx.ID_ANY, "Kenngrößen Ganglinien (aktive Clusterung)")
+        self.Bind(wx.EVT_MENU, self.on_update_indicator, item_indicators)
+        self.Bind(wx.EVT_MENU, self.on_update_global_indicators, item_global_indicators)
+        self.Bind(wx.EVT_MENU, self.on_show_indicator, item_indicator_table)
+
+        # Add items to Bemessung menu
+        # Placeholder for future implementation
+        item_dimensioning = menu_dimensioning.Append(wx.ID_ANY, "Dauerlinien und Bemessung", "Öffnet ein Fenster zur Anzeige der Dauerlinien")
+        self.Bind(wx.EVT_MENU, self.on_design_hourly_volumes, item_dimensioning)
+
+        # Add menus to menubar
+        menubar.Append(menu_data_import, "Datenimport")
+        menubar.Append(menu_export, "Export")
+        menubar.Append(menu_diagrams, "Diagramme")
+        menubar.Append(menu_indicators, "Kenngrößen Ganglinien")
+        menubar.Append(menu_dimensioning, "Dauerlinien/Bemessung")
+
+        # Set menubar
+        self.SetMenuBar(menubar)
+        self.Layout()
+
+
+    ## @brief Placeholder for menu items that are not yet implemented.
+    #
+    #  This method displays a message box indicating that the selected feature is not yet implemented.
+    #
+    #  @param event The wxPython event object.
+    def on_placeholder(self, event):
+        wx.MessageBox("Diese Funktion ist noch nicht implementiert.", "Information", wx.OK | wx.ICON_INFORMATION)
+
     ## @brief Logs the event when a WebView finishes loading.
     #
     #  This method is triggered when the WebView component completes loading a webpage.
@@ -1385,59 +1727,12 @@ class ClusterGUI(wx.Frame):
         bank_holidays = set(incl_properties) & {"Feiertage", "bank holidays"}
         school_holidays = set(incl_properties) & {"Ferien", "school holidays"}
 
-        # 4. Initiale Liste der Datetime-Indizes im Dataset
-        filtered_indices = pd.to_datetime(self.cluster_data.index)
-
-        # 5. Filtern der Wochentage
-        if len(day_short) < 7:
-            num_char_day = len(day_short[0])
-            weekdays = getattr(self.calendar_obj, "wochentag", getattr(self.calendar_obj, "weekday", {}))
-            dict_keys = {key[:num_char_day]: key for key in weekdays.keys()}
-            day_short = [dict_keys[day] for day in day_short]
-            days = [date for day in day_short for date in
-                    (weekdays[day].date.tolist() if isinstance(weekdays[day], pd.DatetimeIndex) else weekdays[day])]
-            days = pd.to_datetime(days)
-            #list(itertools.chain.from_iterable([date for day in day_short for date in weekdays[day]]))
-            days = pd.to_datetime(days)
-            filtered_indices = filtered_indices[filtered_indices.isin(days)]
-
-        # 6. Filtern der Feiertage und Ferien
-        holidays = set()
-        if len(bank_holidays | school_holidays) == 2:
-            pass
-        elif len(bank_holidays | school_holidays) < 1:
-            feiertage = getattr(self.calendar_obj, "feiertage", getattr(self.calendar_obj, "bank_holidays", {}))
-            ferien = getattr(self.calendar_obj, "ferien",
-                                 getattr(self.calendar_obj, "school_holidays", []))
-            if len(feiertage) > 0:
-                holidays.update({date for dates in feiertage.values() for date in dates})
-            if len(ferien) > 0:
-                holidays.update({date for dates in ferien.values() for date in dates})
-
-        elif len(bank_holidays) < 1:
-            feiertage = getattr(self.calendar_obj, "feiertage", getattr(self.calendar_obj, "bank_holidays", {}))
-            if len(feiertage) > 0:
-                holidays.update({date for dates in feiertage.values() for date in dates})
-        elif len(school_holidays) < 1:
-            ferien = getattr(self.calendar_obj, "ferien",
-                                 getattr(self.calendar_obj, "school_holidays", []))
-            if len(ferien) > 0:
-                holidays.update({date for dates in ferien.values() for date in dates})
-        else:
-            logging.error("Unvorhergesehener Fall beim Filtern von Feiertagen und Ferien.")
-
-        # Falls Feiertage vorhanden sind, diese herausfiltern
-        if len(holidays) > 0:
-            holidays = pd.to_datetime(list(holidays))
-            filtered_indices = filtered_indices[~filtered_indices.isin(holidays)]
-
-        # 7. Filtern nach Datumsbereich
-        start_date = pd.to_datetime(self.start_date.GetValue().FormatISODate())
-        end_date = pd.to_datetime(self.end_date.GetValue().FormatISODate())
-        filtered_indices = filtered_indices[(filtered_indices >= start_date) & (filtered_indices <= end_date)].date
-
-        # Logging der gefilterten Daten
-        logging.info(f"Es werden {len(filtered_indices)} von {len(self.cluster_data)} Ganglinien berücksichtigt")
+        filtered_indices = self.calendar_obj._get_filtered_indices_data(pd.to_datetime(self.cluster_data.index),
+                                                                        days_to_include=day_short,
+                                                                        include_bank_holidays= True if len(bank_holidays) > 0 else False,
+                                                                        include_school_holidays= True if len(school_holidays) > 0 else False,
+                                                                        start_date = pd.to_datetime(self.start_date.GetValue().FormatISODate()),
+                                                                        end_date = pd.to_datetime(self.end_date.GetValue().FormatISODate()))
 
         return filtered_indices
 
@@ -1496,6 +1791,18 @@ class ClusterGUI(wx.Frame):
 
         # Update Plots if necessary
         self.on_update_vertical_lines()
+
+    def on_reset_attr_data(self, event, attr_name):
+        setattr(self, attr_name, pd.DataFrame())
+        df = getattr(self, attr_name, pd.DataFrame())
+        # Display information about the loaded dataset.
+        text_data = f"{len(df)} Ganglinien mit je {len(df.columns)} Elementen importiert"
+        if attr_name == "cluster_data":
+            self.text_data.SetLabel(text_data)
+        elif attr_name == "properties_data":
+            self.text_properties.SetLabel(text_data)
+        logging.info(f"{attr_name} als leere Tabelle initialisiert")
+
 
 
 ## @class MainTab
@@ -1814,7 +2121,11 @@ class PlotPopup(wx.Frame):
     #  @param parent The parent wx object.
     #  @param fig The Plotly figure to display.
     #  @param title The title of the window.
-    def __init__(self, parent, fig, title):
+    #  @param cluster_id The ID of the cluster (optional).
+    def __init__(self, parent, fig, title, cluster_id=None):
+        # Update title with cluster_id if provided
+        if cluster_id is not None:
+            title = f"{title} (ID Clusterung: {cluster_id})"
         super(PlotPopup, self).__init__(parent, title=title, size=(900, 900))
 
         ## @var fig
@@ -1852,7 +2163,7 @@ class PlotPopup(wx.Frame):
         width, height = self.GetSize().Get()
 
         # Adjust Plotly figure layout
-        self.fig.update_layout(width=width * 0.93, height=height * 0.93,
+        self.fig.update_layout(width=width * 0.93, height=height * 0.90,
                                margin=dict(l=20, r=20, t=30, b=20))
 
         # Save the figure as an HTML file
@@ -1862,6 +2173,362 @@ class PlotPopup(wx.Frame):
         # Load the HTML file into the WebView
         wx.CallAfter(self.web_view.LoadURL, f"file:///{os.path.abspath(plotly_html)}")
 
+
+## @class ButtonPlotPopup
+#  @brief A popup window for displaying Plotly visualizations with buttons and checkboxes at the top.
+#
+#  The `ButtonPlotPopup` class extends the `PlotPopup` class by adding a row of buttons
+#  at the top of the window, including a button to update the diagram.
+class ButtonPlotPopup(PlotPopup):
+    ## @brief Initializes the ButtonPlotPopup window.
+    #  @param parent The parent wx object.
+    #  @param clustering The clustering object.
+    #  @param fig The Plotly figure to display.
+    #  @param title The title of the window.
+    #  @param checkboxes Dictionary of checkboxes to display.
+    #  @param str_plot_function Name of the plot function to call.
+    #  @param cluster_id The ID of the cluster (optional).
+    def __init__(self, parent, clustering, fig, title, checkboxes: dict={}, str_plot_function: str="", cluster_id=None):
+        super(ButtonPlotPopup, self).__init__(parent, fig, title, cluster_id)
+
+        self.clustering = clustering
+        self.plot_fcn = str_plot_function
+
+        # Create a button panel at the top
+        self.button_panel = wx.Panel(self)
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        # Add a spacer to push content to center
+        button_sizer.AddStretchSpacer()
+
+        # Create the update button
+        self.update_button = wx.Button(self.button_panel, label="Diagramm aktualisieren")
+        self.update_button.Bind(wx.EVT_BUTTON, self.on_update_diagram)
+        button_sizer.Add(self.update_button, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
+
+        self.attr_list = list(checkboxes.keys())
+
+        for attr, text in checkboxes.items():
+            setattr(self, attr, wx.CheckBox(self.button_panel, label=text))
+            button_sizer.Add(getattr(self, attr), 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
+
+        # Add another spacer to push content to center
+        button_sizer.AddStretchSpacer()
+
+        # Set the button panel sizer
+        self.button_panel.SetSizer(button_sizer)
+
+        # Update the main sizer to include the button panel
+        main_sizer = self.GetSizer()
+        main_sizer.Insert(0, self.button_panel, 0, wx.EXPAND, 5)
+        self.Layout()
+
+    ## @brief Handles the update diagram button click.
+    #  @param event The wx event.
+    def on_update_diagram(self, event):
+
+        # Get the checkbox values (checked/unchecked state)
+        kwargs = {key: getattr(self, key).GetValue() for key in self.attr_list}
+        self.fig = getattr(self.clustering, self.plot_fcn)(**kwargs)
+
+        # Update the figure
+        self.update_figure()
+
+## @class PopUpIndicatorWindow
+#  @brief A popup window for displaying indicator tables.
+#
+#  The `PopUpIndicatorWindow` class creates a wxPython-based window that displays tables
+#  for indicators in a clustering object. It includes a list control to select which
+#  indicator to display and tables for both cluster indicators and data indicators.
+class PopUpIndicatorWindow(wx.Frame):
+    ## @brief Initializes the indicator table popup.
+    #  @param parent The parent wx object.
+    #  @param clusterobj The clustering object containing the indicators.
+    #  @param title The title of the window.
+    def __init__(self, parent, clusterobj, title="Kenngrößen Ganglinien", cluster_id=None, num_decimal_places=0):
+        # Update title with cluster_id if provided
+        if cluster_id is not None:
+            title = f"{title} (ID: {cluster_id})"
+        super(PopUpIndicatorWindow, self).__init__(parent, title=title, size=(900, 600))
+
+        ## @var clusterobj
+        #  The clustering object containing the indicators.
+        self.clusterobj = clusterobj
+
+        ## @var num_decimal_places
+        #  Number of decimal places to use when rounding values in tables.
+        self.num_decimal_places = num_decimal_places
+
+        ## @var indicators
+        #  List of available indicators.
+        self.indicators = list(self.clusterobj.indicators_clusters.keys())
+
+        ## @var current_indicator
+        #  The currently selected indicator.
+        self.current_indicator = self.indicators[0] if self.indicators else None
+
+        # Create the main panel and sizer
+        panel = wx.Panel(self)
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # Create the indicator selection control
+        indicator_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        indicator_label = wx.StaticText(panel, label="Kenngröße auswählen:")
+        self.indicator_choice = wx.Choice(panel, choices=self.indicators)
+        self.indicator_choice.SetSelection(0)
+        self.indicator_choice.Bind(wx.EVT_CHOICE, self.on_indicator_selected)
+
+        # Add filter checkbox
+        self.filter_checkbox = wx.CheckBox(panel, label="Nur aktives Cluster anzeigen")
+        self.filter_checkbox.Bind(wx.EVT_CHECKBOX, self.on_filter_changed)
+
+        # Add cluster selection for filtering
+        cluster_label = wx.StaticText(panel, label="Cluster:")
+        self.cluster_choice = wx.Choice(panel, choices=[str(c) for c in sorted(self.clusterobj.clusters.unique())])
+        self.cluster_choice.SetSelection(0)
+        self.cluster_choice.Bind(wx.EVT_CHOICE, self.on_filter_changed)
+        self.cluster_choice.Enable(False)  # Disabled by default
+
+        indicator_sizer.Add(indicator_label, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
+        indicator_sizer.Add(self.indicator_choice, 1, wx.ALL | wx.EXPAND, 5)
+        indicator_sizer.Add(self.filter_checkbox, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
+        indicator_sizer.Add(cluster_label, 0, wx.ALL | wx.ALIGN_CENTER_VERTICAL, 5)
+        indicator_sizer.Add(self.cluster_choice, 0, wx.ALL | wx.EXPAND, 5)
+        main_sizer.Add(indicator_sizer, 0, wx.EXPAND, 5)
+
+        # Create a notebook for the tables
+        self.notebook = wx.Notebook(panel)
+
+        # Create pages for cluster indicators and data indicators
+        self.cluster_panel = wx.Panel(self.notebook)
+        self.data_panel = wx.Panel(self.notebook)
+
+        # Create tables for cluster indicators and data indicators
+        self.create_cluster_table()
+        self.create_data_table()
+
+        # Add pages to the notebook
+        self.notebook.AddPage(self.cluster_panel, "Cluster Kenngrößen")
+        self.notebook.AddPage(self.data_panel, "Daten Kenngrößen")
+
+        main_sizer.Add(self.notebook, 1, wx.EXPAND | wx.ALL, 5)
+
+        panel.SetSizer(main_sizer)
+        self.Centre()
+
+        # Initialize the tables with the first indicator
+        self.update_tables()
+
+    ## @brief Creates the table for cluster indicators.
+    def create_cluster_table(self):
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # Create a DataViewListCtrl for displaying cluster indicators
+        self.cluster_table = dv.DataViewListCtrl(self.cluster_panel, style=wx.BORDER_SUNKEN | dv.DV_ROW_LINES)
+
+        # Add columns for the table
+        self.cluster_table.AppendTextColumn("Cluster", width=80)
+
+        # Add a column for global indicators if they exist
+        # if hasattr(self.clusterobj, 'indicators_global_cluster') and self.clusterobj.indicators_global_cluster:
+        self.cluster_table.AppendTextColumn("Global", width=80)
+
+        # Add columns for each count station
+        for col in self.clusterobj.series_cs.keys():
+            self.cluster_table.AppendTextColumn(col, width=100)
+
+        sizer.Add(self.cluster_table, 1, wx.EXPAND | wx.ALL, 5)
+        self.cluster_panel.SetSizer(sizer)
+
+    ## @brief Creates the table for data indicators.
+    def create_data_table(self):
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # Create a DataViewListCtrl for displaying data indicators
+        self.data_table = dv.DataViewListCtrl(self.data_panel, style=wx.BORDER_SUNKEN | dv.DV_ROW_LINES)
+
+        # Add columns for the table
+        self.data_table.AppendTextColumn("Datum", width=120)
+        self.data_table.AppendTextColumn("Cluster", width=80)
+
+        # # Add a column for global indicators if they exist
+        # if hasattr(self.clusterobj, 'indicators_global_data') and self.clusterobj.indicators_global_data:
+        self.data_table.AppendTextColumn("Global", width=80)
+
+        # Add columns for each count station
+        for col in self.clusterobj.series_cs.keys():
+            self.data_table.AppendTextColumn(col, width=100)
+
+        sizer.Add(self.data_table, 1, wx.EXPAND | wx.ALL, 5)
+        self.data_panel.SetSizer(sizer)
+
+    def update_table(
+            self,
+            table,
+            data_df,
+            global_data=None,
+            is_cluster=False,
+            filter_cluster=None,
+            cluster_assignments=None
+    ):
+        """
+        Aktualisiert eine wx.DataViewListCtrl-Tabelle mit den übergebenen Daten.
+        - table: wx.DataViewListCtrl-Objekt
+        - data_df: DataFrame mit den darzustellenden Daten
+        - global_data: Series/DataFrame mit globalen Indikatorwerten (optional)
+        - is_cluster: True, wenn Cluster-Tabelle (für spezielle Regeln)
+        - filter_cluster: Cluster-ID für Filter (optional)
+        - cluster_assignments: Series zum Zuordnen von Clustern zu Zeilen (optional)
+        """
+        try:
+            table.DeleteAllItems()
+
+            # Optional: Cluster-IDs als erste Spalte
+            if not is_cluster and cluster_assignments is not None:
+                cluster_assignments = cluster_assignments.to_frame(name=("cluster", ''))
+                df_numeric = pd.concat([cluster_assignments, data_df], axis=1)
+                # timestamps to string --> in Formatierungsmethode ausgelagert
+                # if isinstance(df_numeric.index, pd.DatetimeIndex):
+                #     df_numeric.index = df_numeric.index.strftime("%d.%m.%Y")
+                # else:
+                #     df_numeric.index = df_numeric.index.astype(str)
+            else:
+                # Optional: Cluster-Filter anwenden
+                df_numeric = data_df.copy()
+                # df_numeric.index = df_numeric.index.astype(str)
+
+            if filter_cluster is not None:
+                df_numeric = df_numeric[df_numeric[('cluster','')] == filter_cluster]
+
+            df_numeric.reset_index(inplace=True, names="true_index")
+
+            # insert global column if it doesn't exist
+
+            if is_cluster:
+                df_numeric.insert(1, 'global', np.nan)
+            else:
+                df_numeric.insert(2, "global", np.nan)
+
+            if global_data is not None and hasattr(self, "current_indicator"):
+                if "SP" not in self.current_indicator:
+                    df_numeric.loc[:, 'global'] = df_numeric['true_index'].map(global_data[self.current_indicator])
+                else:
+                    df_numeric.loc[:, 'global'] = df_numeric['true_index'].map(global_data["sp"])
+
+            # Initialize df_text
+            if isinstance(df_numeric.columns, pd.MultiIndex):
+                first_level_names = df_numeric.columns.get_level_values(0).unique()
+                df_text = pd.DataFrame({
+                    rmq: df_numeric.xs(rmq, axis=1, level=0)
+                    .map(self.format_val)
+                    .agg(';'.join, axis=1)
+                    for rmq in first_level_names
+                })
+            else:
+                # If not a MultiIndex, use the DataFrame directly
+                df_text = df_numeric.map(self.format_val)
+
+            for row in df_text.values.tolist():
+                if len(row) != table.GetColumnCount():
+                    logging.warning("Spaltenanzahl passt nicht zur Tabelle, Zeile wird ignoriert")
+                else:
+                    table.AppendItem(row)
+
+            # Statistikzeilen (Minimum, Maximum, Durchschnitt)
+            if not df_text.empty:
+                df_stats = pd.DataFrame({"Minimum": df_numeric.min(),
+                                         "Maximum": df_numeric.max(),
+                                         "Durchschnitt":df_numeric.mean()}).T
+
+                # Für SP: nur q_max-Spalten
+                if hasattr(self, "current_indicator") and "SP" in self.current_indicator and isinstance(df_numeric.columns, pd.MultiIndex):
+                    delete_cols = [col for col in df_numeric.columns if "sp" in col[1]]
+                    df_stats.drop(delete_cols, axis=1, inplace=True)
+
+                df_stats.drop(columns=df_stats.columns[0], axis=1,  inplace=True)
+                df_stats.reset_index(inplace=True)
+                df_stats = df_stats.map(self.format_val)
+
+                for row in df_stats.values.tolist():
+                    if len(row) != table.GetColumnCount():
+                        logging.warning("Spaltenanzahl passt nicht zur Tabelle, Zeile wird ignoriert")
+                    else:
+                        table.AppendItem(row)
+
+        except Exception as e:
+            logging.error(f"Update table failed: {e}")
+
+    def format_val(self, val):
+        if isinstance(val, str):
+            return val
+        elif isinstance(val, pd.Timestamp):
+            return val.strftime("%d.%m.%Y")
+        elif pd.isna(val):
+            return "-"
+        elif isinstance(val, (float, int)):
+            if self.num_decimal_places == 0:
+                return str(int(round(val)))
+            else:
+                return f"{val:,{self.num_decimal_places}f}"
+        else:
+            return str(val)
+
+    ## @brief Updates the tables with the selected indicator.
+    def update_tables(self):
+        if not self.current_indicator or not self.indicators:
+            return
+
+
+        # Get the indicator data
+        cluster_data = self.clusterobj.indicators_clusters[self.current_indicator]
+        data_data = self.clusterobj.indicators_data[self.current_indicator]
+
+        # Check if global indicators exist
+        if hasattr(self.clusterobj, 'indicators_cluster_global'):
+            global_cluster = self.clusterobj.indicators_cluster_global[self.current_indicator]
+        else:
+            global_cluster = None
+
+        if hasattr(self.clusterobj, 'indicators_data_global'):
+            global_data = self.clusterobj.indicators_data_global[self.current_indicator]
+        else:
+            global_data = None
+
+
+        # Apply filter if enabled
+        if self.filter_checkbox.IsChecked():
+            selected_cluster = int(self.cluster_choice.GetStringSelection())
+
+        else:
+            selected_cluster = None
+
+        series_cluster = self.clusterobj.clusters
+
+        self.update_table(self.cluster_table, cluster_data, global_data=global_cluster,
+                          is_cluster=True, filter_cluster=None, cluster_assignments=None)
+
+        self.update_table(self.data_table, data_data, global_data=global_data,
+                          is_cluster=False, filter_cluster=selected_cluster, cluster_assignments=series_cluster)
+
+
+
+    ## @brief Handles changes to the filter settings.
+    #  @param event The wx event.
+    def on_filter_changed(self, event):
+        # Enable/disable the cluster choice based on the filter checkbox
+        self.cluster_choice.Enable(self.filter_checkbox.IsChecked())
+
+        # Update the tables with the new filter settings
+        self.update_tables()
+
+    ## @brief Handles the selection of an indicator.
+    #  @param event The wx event.
+    def on_indicator_selected(self, event):
+        self.current_indicator = self.indicator_choice.GetStringSelection()
+        try:
+            self.update_tables()
+        except:
+            logging.error(f"Update Tabelle {self.current_indicator} fehlgeschlagen")
 
 ## @class HelpPopUp
 #  @brief A popup window for displaying documentation pages.
@@ -2004,6 +2671,7 @@ class HelpPopUp(wx.Frame):
         except Exception as e:
             print(f"Error converting Markdown to HTML: {e}")
             return "<h3>Error: Markdown processing failed.</h3>"
+
 
 
 if __name__ == "__main__":

@@ -34,6 +34,261 @@ from modules.clustering import Clusterung
 from modules.calendar_attributes import CalendarAttributes
 from pathlib import Path
 import json
+import plotly.express as px
+from copy import deepcopy
+
+
+## @class ConfigManager
+#  @brief Manages the configuration of the Clustertool.
+#
+#  This class implements the Singleton pattern to ensure only one configuration
+#  manager exists throughout the application. It handles loading, saving, and
+#  providing access to configuration settings and color schemes.
+class ConfigManager:
+    _instance = None  # Singleton-Pattern
+
+    ## @brief Creates a new ConfigManager instance or returns the existing one (Singleton pattern).
+    #  @param cls The class being instantiated.
+    #  @return The singleton instance of ConfigManager.
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(ConfigManager, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    ## @brief Initializes the ConfigManager instance.
+    #
+    #  Sets up configuration paths, ensures the config directory exists,
+    #  creates default configuration files if needed, and loads configurations.
+    #  If the instance is already initialized, this method returns early.
+    def __init__(self):
+        if self._initialized:
+            return
+
+        ## @var config_dir
+        #  Path to the configuration directory.
+        self.config_dir = Path(__file__).parent.parent / "config"
+
+        ## @var config_file
+        #  Path to the main configuration JSON file.
+        self.config_file = self.config_dir / "config.json"
+
+        ## @var colors_file
+        #  Path to the colors configuration JSON file.
+        self.colors_file = self.config_dir / "colors.json"
+
+        # Ensure config directory exists
+        self.config_dir.mkdir(exist_ok=True)
+
+        # Load or create configurations
+        if not self.config_file.exists():
+            self._create_default_config()
+        if not self.colors_file.exists():
+            self._create_default_colors()
+
+        self._load_config()
+        self._load_colors()
+
+
+    ## @brief Creates the default configuration file.
+    #
+    #  Generates a JSON configuration file with default settings for the GUI,
+    #  clustering parameters, calendar settings, and file paths.
+    def _create_default_config(self):
+        default_config = {
+            "gui": {
+                "default_language": "de",
+                "window_size": [1024, 768],
+                "default_property": "Wochentag"
+            },
+            "clustering": {
+                "default_method": "average",
+                "default_distance": "SQV Counts",
+                "default_cutoff": 0.8,
+                "default_kmeans_preset": "random"
+            },
+            "calendar": {
+                "default_state": "BW"
+            },
+            "paths": {
+                "data_dir": "data/",
+                "temp_dir": "temp/"
+            }
+        }
+        with open(self.config_file, 'w') as f:
+            json.dump(default_config, f, indent=4)
+
+    ## @brief Creates the default color configuration.
+    #
+    #  Generates a JSON file with default color settings including color sequences
+    #  for clusters, properties, and weekdays, as well as gradient color scales.
+    def _create_default_colors(self):
+        default_colors = {
+            "_meta": {
+                "description": '''Farbdefinitionen, unterteilt in Farbsequenzen und Farbskalen. 
+                Sequenzen können als Listen oder LookUp Dicts übergeben werden.  
+                Spezielle Colormaps entsprechen einsortieren mit key = Bezugsattribut.
+                Beim Update der Farben erfolgt die Zuordnung Listenreihenfolge zu alphabetisch sortierten Attributswerten''',
+                "version": "1.0"
+            },
+            "sequences": {
+                "default": {
+                    "type": "sequence",
+                    "name": "Dark24",
+                    "colors": list(px.colors.qualitative.Dark24)
+
+                },
+                "properties": {
+                    "type": "sequence",
+                    "name": "G10",
+                    "colors": list(px.colors.qualitative.G10)
+
+                },
+                "wochentag": {
+                    "type": "sequence",
+                    "name": "Wochentag",
+                    "colors": {
+                        "Montag": "#008000",
+                        "Dienstag": "#000080",
+                        "Mittwoch": "#00FFFF",
+                        "Donnerstag": "#0000FF",
+                        "Freitag": "#FF7F00",
+                        "Samstag": "#FF0000",
+                        "Sonntag": "#800000"
+                    }
+                }
+            },
+            "gradients": {
+                "default": {
+                    "type": "gradient",
+                    "name": "spectral"
+                }
+            }
+        }
+        with open(self.colors_file, 'w') as f:
+            json.dump(default_colors, f, indent=4)
+
+    ## @brief Loads the configuration from the JSON file.
+    #
+    #  Reads the configuration settings from the JSON file and stores them
+    #  in the config attribute.
+    def _load_config(self):
+        with open(self.config_file) as f:
+            self.config = json.load(f)
+
+    ## @brief Loads the color configuration from the JSON file.
+    #
+    #  Reads the color settings from the JSON file, converts cluster keys
+    #  from strings back to integers, and stores the configuration in the
+    #  colors attribute.
+    def _load_colors(self):
+        with open(self.colors_file) as f:
+            colors_data = json.load(f)
+
+        # Convert cluster keys from strings back to integers
+        if "cluster" in colors_data["sequences"]:
+            colors_data["sequences"]["cluster"]["colors"] = {
+                int(k): v for k, v in colors_data["sequences"]["cluster"]["colors"].items()
+            }
+
+        self.colors = colors_data
+
+
+    ## @brief Returns colors from a specified color sequence.
+    #
+    #  Retrieves a color sequence by name. If the requested sequence doesn't exist,
+    #  falls back to either the "properties" sequence (if flag_property is True)
+    #  or the "default" sequence.
+    #
+    #  @param name The name of the color sequence to retrieve (default: "default").
+    #  @param flag_property If True, uses the "properties" sequence as fallback instead of "default".
+    #  @return A list or dictionary of colors from the specified sequence.
+    def get_colors(self, name="default", flag_property=False):
+        sequence = self.colors["sequences"].get(name.lower())
+        if not sequence:
+            # Fall back to default sequence
+            if flag_property:
+                sequence = self.colors["sequences"]["properties"]
+            else:
+                sequence = self.colors["sequences"]["default"]
+            logging.info(f"Color sequence {name} not found, using default")
+
+        colors = sequence["colors"]
+
+        return colors
+
+    ## @brief Retrieves a specific clustering configuration attribute.
+    #
+    #  @param attr_name The name of the clustering attribute to retrieve.
+    #  @return The value of the requested clustering attribute.
+    def get_cluster_attribute(self, attr_name):
+        return self.config["clustering"].get(attr_name)
+
+    ## @brief Returns the name of a color gradient.
+    #
+    #  Retrieves a color gradient by name. If the requested gradient doesn't exist,
+    #  falls back to the "default" sequence.
+    #
+    #  @param name The name of the color gradient to retrieve (default: "default").
+    #  @return The name of the specified gradient.
+    def get_colorscale(self, name="default"):
+        gradient = self.colors["gradients"].get(name)
+        if not gradient:
+            # Fall back to default sequence
+            gradient = self.colors["sequences"]["default"]
+            logging.info(f"Color gradient {name} not found, using default")
+
+        return gradient["name"]
+
+    ## @brief Saves the current configuration to JSON files.
+    #
+    #  Writes both the main configuration and color settings to their
+    #  respective JSON files.
+    def save(self):
+        with open(self.config_file, 'w') as f:
+            json.dump(self.config, f, indent=4)
+        with open(self.colors_file, 'w') as f:
+            json.dump(self.colors, f, indent=4)
+
+    ## @brief Reloads the configuration from JSON files.
+    #
+    #  Refreshes both the main configuration and color settings by
+    #  reading them again from their respective JSON files.
+    def reload(self):
+        self._load_config()
+        self._load_colors()
+
+
+    ## @brief Saves the current color configuration to a JSON file.
+    #
+    #  Creates a copy of the color configuration and saves it to the specified file.
+    #  If no file path is provided, the default colors file path is used.
+    #
+    #  @param filepath Optional; Path to the target file. If None, self.colors_file is used.
+    def write_colors(self, filepath=None):
+        if filepath is None:
+            filepath = self.colors_file
+
+        # Erstelle eine Kopie der Farbkonfiguration
+        colors_data = {
+            "_meta": {
+                "description": self.colors["_meta"]["description"],
+                "version": self.colors["_meta"]["version"],
+            },
+            "sequences": self.colors["sequences"].copy(),
+            "gradients": self.colors["gradients"].copy()
+        }
+
+        # # Konvertiere nur Cluster-Farben zu Strings
+        # Problem: keine Deepcopy, verÃ¤ndert Original. Konvertierung direkt in json.dump ausgelagert
+        # if "cluster" in colors_data["sequences"]:
+        #     colors_data["sequences"]["cluster"]["colors"] = {
+        #         str(k): v for k, v in colors_data["sequences"]["cluster"]["colors"].items()
+        #     }
+
+        # Speichere als JSON mit Einrückung
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(prepare_json_safe(colors_data), f, indent=4, ensure_ascii=False)
 
 
 ## @brief Loads data from a CSV file.
@@ -119,6 +374,7 @@ def load_mat(file_path):
     else:
         raise ValueError(f"Multiple variables found in {file_path}: {keys}. Please specify.")
 
+
 def convert_to_datetime(idx_df):
 
     # Convert first column if it is a MATLAB/Excel datenum
@@ -144,8 +400,6 @@ def convert_to_datetime(idx_df):
         logging.warning("Keine Umwandlung Format Datum")
 
     return new_index
-
-
 
 
 
@@ -225,6 +479,31 @@ def load_and_prepare_data(file_path, sheet=None):
     return df
 
 
+def explode_dict_cells(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Explodiert Spalten mit dict-Zellen zu einem DataFrame mit MultiIndex-Spalten.
+
+    Beispiel:
+    Spalte 'Ferien' mit dict {"Sommerferien": 0.2, "Osterferien": 0.8}
+    ➝ MultiIndex-Spalten ('Ferien', 'Sommerferien'), ('Ferien', 'Osterferien')
+    """
+    exploded_parts = []
+
+    for col in df.columns:
+        if df[col].apply(lambda x: isinstance(x, dict)).all():
+            # Normale Zellen mit dict → expandieren
+            col_df = pd.json_normalize(df[col])
+            col_df.columns = pd.MultiIndex.from_product([[col], col_df.columns])
+            exploded_parts.append(col_df)
+        else:
+            # Andere Spalten (nicht dict) → behalten
+            exploded_parts.append(pd.DataFrame({(col, ''): df[col]}))
+
+    result = pd.concat(exploded_parts, axis=1)
+    return result
+
+
+
 ## @brief Saves a Clusterung instance as a JSON file.
 #  @param cluster_obj The Clusterung object to save.
 #  @param filepath Path to save the JSON file.
@@ -248,14 +527,32 @@ def save_clusterung_to_json(cluster_obj, filepath):
         "data": convert_index_and_keys_to_str(cluster_obj.data),
         "cluster_properties": convert_index_and_keys_to_str(cluster_obj.cluster_properties),
     }
+
+    # Add indicators for data if available
+    if hasattr(cluster_obj, 'indicators_data') and cluster_obj.indicators_data:
+        data["indicators_data"] = {}
+        for indicator_name, indicator_df in cluster_obj.indicators_data.items():
+            data["indicators_data"][indicator_name] = convert_index_and_keys_to_str(indicator_df)
+
+    # Add indicators for clusters if available
+    if hasattr(cluster_obj, 'indicators_clusters') and cluster_obj.indicators_clusters:
+        data["indicators_clusters"] = {}
+        for indicator_name, indicator_df in cluster_obj.indicators_clusters.items():
+            data["indicators_clusters"][indicator_name] = convert_index_and_keys_to_str(indicator_df)
+
     with open(filepath, "w") as f:
         json.dump(data, f, indent=4)
 
 
 ## @brief Loads a Clusterung instance from a JSON file.
 #  @param filepath Path to the JSON file.
+#  @param config_manager Optional; ConfigManager instance to use. If None, the global config_manager is used.
 #  @return A Clusterung object with restored data.
-def load_clusterung_from_json(filepath):
+def load_clusterung_from_json(filepath, config_manager=None):
+    # Use the global config_manager if none is provided
+    if config_manager is None:
+        from modules.data_handler import config_manager as global_config_manager
+        config_manager = global_config_manager
 
     """Lädt eine Clusterung-Instanz aus einer JSON-Datei."""
     with open(filepath, "r") as f:
@@ -264,6 +561,12 @@ def load_clusterung_from_json(filepath):
     clusters = pd.DataFrame.from_dict(data_file["clusters"], orient="index")
     data = pd.DataFrame.from_dict(data_file["data"])
     data_properties = pd.DataFrame.from_dict(data_file["properties_dates"])
+
+    # Stelle potenzielle MultiIndex-Spalten wieder her
+    data = restore_multiindex_columns(data)
+    data_properties = restore_multiindex_columns(data_properties)
+    clusters = restore_multiindex_columns(clusters)
+
 
     clusters.index = pd.to_datetime(clusters.index)
     data.index = pd.to_datetime(data.index)
@@ -298,7 +601,8 @@ def load_clusterung_from_json(filepath):
         kmeans_preset=data_file["kmeans_presettings"],
         data=data,
         attr_data=data_properties,
-        calendar_obj=calendar_attr
+        calendar_obj=calendar_attr,
+        config_manager=config_manager
     )
     obj.clusters = clusters.squeeze()
     obj.distance_matrix = pd.DataFrame.from_dict(data_file["distance_matrix"]) if data_file[
@@ -314,6 +618,23 @@ def load_clusterung_from_json(filepath):
     obj.cluster_properties.index = obj.cluster_properties.index.astype(float).astype(int)
     obj.representative_series.index = obj.representative_series.index.astype(int)
     obj.representative_series.index.name = "cluster"
+
+    # Bei den Indikatoren auch MultiIndex wiederherstellen
+    if "indicators_data" in data_file and data_file["indicators_data"]:
+        obj.indicators_data = {}
+        for indicator_name, indicator_data in data_file["indicators_data"].items():
+            indicator_df = pd.DataFrame.from_dict(indicator_data)
+            indicator_df.index = pd.to_datetime(indicator_df.index)
+            indicator_df = restore_multiindex_columns(indicator_df)
+            obj.indicators_data[indicator_name] = indicator_df
+
+    if "indicators_clusters" in data_file and data_file["indicators_clusters"]:
+        obj.indicators_clusters = {}
+        for indicator_name, indicator_data in data_file["indicators_clusters"].items():
+            indicator_df = pd.DataFrame.from_dict(indicator_data)
+            indicator_df.index = indicator_df.index.astype(int)
+            indicator_df = restore_multiindex_columns(indicator_df)
+            obj.indicators_clusters[indicator_name] = indicator_df
 
     return obj
 
@@ -368,8 +689,18 @@ def convert_index_and_keys_to_str(data_dict):
     if isinstance(data_dict, pd.DataFrame):
         data_dict = data_dict.copy()
         data_dict.index = data_dict.index.astype(str)
-        data_dict.columns = data_dict.columns.astype(str)
-        return data_dict.to_dict()
+
+        # Wenn es ein MultiIndex ist: zu String
+        if isinstance(data_dict.columns, pd.MultiIndex):
+            data_dict.columns = ["|".join(map(str, col)) if isinstance(col, tuple) else str(col)
+                               for col in data_dict.columns]
+            return data_dict.to_dict()
+
+        else:
+            # Für normale Spalten, behalte bisheriges Verhalten bei
+            data_dict.columns = data_dict.columns.astype(str)
+            return data_dict.to_dict()
+
     elif isinstance(data_dict, pd.Series):
         data_dict = data_dict.copy()
         data_dict.index = data_dict.index.astype(str)
@@ -427,7 +758,7 @@ def save_clusterung_to_csv(cluster_obj, filepath):
 #
 #  @throws TypeError If `cluster_obj` is not an instance of `Clusterung`.
 def save_clusterung_to_excel(cluster_obj, filepath):
-    """Speichert cluster_data, properties, repräsentative Ganglinien und cluster_properties als Excel."""
+    """Speichert cluster_data, properties, repräsentative Ganglinien, cluster_properties und Indikatoren als Excel."""
 
     # Ensure that the input object is an instance of `Clusterung`.
     if not isinstance(cluster_obj, Clusterung):
@@ -437,7 +768,7 @@ def save_clusterung_to_excel(cluster_obj, filepath):
     with pd.ExcelWriter(filepath) as writer:
         ## Save the original time-series data if available.
         if cluster_obj.data is not None:
-            cluster_obj.data.to_excel(writer, sheet_name="Data Ganglinien")
+            cluster_obj.data.to_excel(writer, sheet_name="Data Ganglinien", float_format="%.0f")
 
         ## Save the additional properties assigned to time-series data.
         if cluster_obj.properties_dates is not None:
@@ -445,15 +776,37 @@ def save_clusterung_to_excel(cluster_obj, filepath):
 
         ## Save the cluster assignments
         if cluster_obj.clusters is not None:
-            cluster_obj.clusters.to_excel(writer, sheet_name="Clusterzuordnung")
+            cluster_obj.clusters.to_excel(writer, sheet_name="Clusterzuordnung", float_format="%.0f")
 
         ## Save the representative series for each cluster.
         if cluster_obj.representative_series is not None:
-            cluster_obj.representative_series.to_excel(writer, sheet_name="Cluster Ganglinien", float_format="%.2f")
+            cluster_obj.representative_series.to_excel(writer, sheet_name="Cluster Ganglinien", float_format="%.0f")
 
         ## Save the properties of each cluster.
         if cluster_obj.cluster_properties is not None:
-            cluster_obj.cluster_properties.to_excel(writer, sheet_name="Cluster Eigenschaften")
+            exploded = explode_dict_cells(cluster_obj.cluster_properties).fillna(0)
+            exploded.to_excel(writer, sheet_name="Cluster Eigenschaften",
+                                                    float_format="%.2f", merge_cells=True)
+
+        ## Save the indicators for the original data if available - combined into a single table
+        if hasattr(cluster_obj, 'indicators_data') and cluster_obj.indicators_data:
+            # Create a combined DataFrame for all data indicators
+            combined_data_indicators = harmonize_and_concat_dfs(cluster_obj.indicators_data)
+            # Indexnamen entfernen
+            combined_data_indicators.index.name = None
+            # Save the combined DataFrame to a single sheet
+            combined_data_indicators.to_excel(writer, sheet_name="Data Kenngrößen", startrow=0,
+                                              float_format="%.0f", merge_cells=True)
+
+        ## Save the indicators for the clusters if available - combined into a single table
+        if hasattr(cluster_obj, 'indicators_clusters') and cluster_obj.indicators_clusters:
+            # Create a combined DataFrame for all cluster indicators
+            combined_cluster_indicators = harmonize_and_concat_dfs(cluster_obj.indicators_clusters)
+            # Indexnamen entfernen
+            combined_cluster_indicators.index.name = None
+            # Save the combined DataFrame to a single sheet
+            combined_cluster_indicators.to_excel(writer, sheet_name="Cluster Kenngrößen",
+                                                 float_format="%.0f", merge_cells=True)
 
 
 ## @brief Converts date strings within a dictionary into `datetime.date` objects.
@@ -470,3 +823,65 @@ def convert_dates(dict_str_attribute):
     ## Convert each date string into a `datetime.date` object.
     return {key: pd.to_datetime(value) for key, value in dict_str_attribute.items()}
 
+
+def restore_multiindex_columns(df):
+    """Stellt MultiIndex-Spalten aus den mit | getrennten Spaltennamen wieder her."""
+    if df is None:
+        return None
+
+    if any("|" in str(col) for col in df.columns):
+        # Konvertiere die Spalten zurück zu MultiIndex
+        df.columns = pd.MultiIndex.from_tuples([
+            tuple(col.split("|")) if "|" in str(col) else (col,)
+            for col in df.columns
+        ])
+    return df
+
+
+def harmonize_and_concat_dfs(dict_dfs):
+    # Finde die maximale Anzahl von Levels
+    max_levels = max(
+        len(df.columns.levels) if isinstance(df.columns, pd.MultiIndex) else 1
+        for df in dict_dfs.values()
+    )
+
+    # Harmonisiere die Column-Levels
+    harmonized_dfs = {}
+    for key, df in dict_dfs.items():
+        if not isinstance(df.columns, pd.MultiIndex):
+            # Wenn keine MultiIndex-Spalten, erstelle einen MultiIndex
+            df = df.copy()
+            df.columns = pd.MultiIndex.from_tuples([(col,) + ("-",) * (max_levels - 1) for col in df.columns])
+        elif len(df.columns.levels) < max_levels:
+            # Wenn weniger Levels, fülle mit "-" auf
+            df = df.copy()
+            new_tuples = [tuple(list(col) + ["-"] * (max_levels - len(col))) for col in df.columns]
+            df.columns = pd.MultiIndex.from_tuples(new_tuples)
+        harmonized_dfs[key] = df
+
+    # Füge die harmonisierten DataFrames zusammen
+    return pd.concat(harmonized_dfs, axis=1, keys=harmonized_dfs.keys())
+
+
+def prepare_json_safe(obj):
+    """Rekursiv: Wandelt numpy-Typen und dict-Keys in JSON-kompatible Typen um, ohne Original zu verändern."""
+    if isinstance(obj, dict):
+        return {str(k): prepare_json_safe(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [prepare_json_safe(i) for i in obj]
+    elif isinstance(obj, tuple):
+        return tuple(prepare_json_safe(i) for i in obj)
+    elif isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    else:
+        return obj
+
+
+# Instanz wird erstellt - nicht auskommentieren!
+config_manager = ConfigManager()
